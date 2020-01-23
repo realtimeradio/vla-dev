@@ -1,0 +1,7 @@
+*.jou
+*.log
+*.str
+*.Xil/
+*.autosave
+startsg.local
+
