@@ -5,3 +5,7 @@
 *.autosave
 startsg.local
 
+# build directories
+adm_pcie_9h7_dts_test/
+adm_pcie_9h7_dts_led_test/
+
