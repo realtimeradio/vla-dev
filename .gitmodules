@@ -4,3 +4,6 @@
 [submodule "sw/casperfpga"]
 	path = sw/casperfpga
 	url = https://github.com/casper-astro/casperfpga
+[submodule "sw/dma_ip_drivers"]
+	path = sw/dma_ip_drivers
+	url = https://github.com/Xilinx/dma_ip_drivers
