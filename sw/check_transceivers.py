@@ -19,5 +19,5 @@ for qsfp in qsfps:
         print('%s status:' % qsfp.itf.controller_name)
         for k, v in stat.items():
             print('    %s: %s' % (k, v))
-    except:
+    except OSError:
         print('Error getting status from %s' % qsfp.itf.controller_name)
