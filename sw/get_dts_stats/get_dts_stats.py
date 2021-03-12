@@ -1,8 +1,14 @@
 import sys
+import struct
 import numpy as np
 
 import casperfpga
 from casperfpga import i2c, i2c_sfp
+
+#LANE_MAP = range(12)
+#LANE_MAP = [4, 0, 5, 1, 2, 3, 6, 7, 8, 9, 10, 11]
+LANE_MAP = [4, 0, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+#LANE_MAP = [4 for _ in range(12)]
 
 class Dts():
     REG_ADDRESS_CR = 0x0 # Control Register
@@ -10,7 +16,7 @@ class Dts():
     REG_ADDRESS_SC = 0x2 # Scramble Code
     REG_ADDRESS_MD = 0x3 # Meta Data
     REG_ADDRESS_TM = 0x4 # Timing Register
-    NREG = 2
+    NREG = 5
     def __init__(self, fpga, regname, nlanes=12):
         self.fpga = fpga
         self.reg = regname
@@ -97,6 +103,15 @@ class Dts():
         self._write_reg(0, 1)
         self._write_reg(1<<31, 1)
         self._write_reg(0, 1)
+
+    def set_lane_map(self, lanemap):
+        x = 0
+        for i in range(self.nlanes):
+            x += (lanemap[i] << (4*i))
+        self._write_reg(x & 0xffffffff, 2)
+        print(hex(x & 0xffffffff))
+        self._write_reg(x >> 32, 3)
+        print(hex(x >> 32))
 
     def latch_parity_errs(self):
         for i in range(self.nlanes):
@@ -199,8 +214,15 @@ def get_sync(fpga):
 
 def print_sync(fpga, locked=0xfff):
     x = get_sync(fpga)
-    for dn, d in enumerate(x['data'][::8]):
+    for dn, d in enumerate(x['data'][0::4][0:32]):
        print("%.4d" % dn, np.binary_repr(d & locked, width=12))
+
+def get_data(fpga, chan):
+    ss = fpga.snapshots['data_ss_snapshot%d' % chan]
+    x, t = ss.read_raw(man_trig=True, man_valid=True)
+    nwords = x['length'] // 2
+    d = struct.unpack('>%dH'  % nwords, x['data'])
+    return d
 
 if __name__ == "__main__":
     fpga = casperfpga.CasperFpga('local', transport=casperfpga.LocalPcieTransport)
@@ -208,7 +230,9 @@ if __name__ == "__main__":
     fpga.get_system_information(sys.argv[1])
 
     dts = Dts(fpga, 'vla_dts')
+    dts.set_lane_map(LANE_MAP)
     dts.reset_delays()
+    dts.unmute()
     print('Locked:')
     locked = fpga.read_uint('locked')
     print(np.binary_repr(locked, width=12))
@@ -220,5 +244,8 @@ if __name__ == "__main__":
     print('Metadata')
     x= dts.get_meta_data()
     for y in x: print(y)
-    #print('Sync:')
-    #print_sync(fpga, locked=locked)
+    print('Sync:')
+    print_sync(fpga, locked=locked)
+    for i in range(8): # loop over IFs
+        print(" ".join(["%.4x" % n for n in get_data(fpga, i)[0:12]]))
+    print(fpga.estimate_fpga_clock())
