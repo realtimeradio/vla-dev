@@ -1,13 +1,14 @@
 import sys
 import struct
 import numpy as np
+from matplotlib import pyplot as plt
 
 import casperfpga
 from casperfpga import i2c, i2c_sfp
 
 #LANE_MAP = range(12)
 #LANE_MAP = [4, 0, 5, 1, 2, 3, 6, 7, 8, 9, 10, 11]
-LANE_MAP = [4, 0, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+LANE_MAP = [0, 4, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4]
 #LANE_MAP = [4 for _ in range(12)]
 
 class Dts():
@@ -218,11 +219,45 @@ def print_sync(fpga, locked=0xfff):
        print("%.4d" % dn, np.binary_repr(d & locked, width=12))
 
 def get_data(fpga, chan):
+    chan = 4-1-chan
+    dout = [0 for _ in range(4096)]
+    for i in range(2):
+        ss = fpga.snapshots['data_ss_snapshot%d' % (2*chan+i)]
+        x, t = ss.read_raw(man_trig=True, man_valid=True)
+        nwords = x['length'] // 2
+        d = struct.unpack('>%dh'  % nwords, x['data'])
+        # Reorder to account for ordering within 2 brams
+        for j in range(nwords//4):
+            for k in range(4):
+                dout[8*j + 4*i + k] = (d[4*j + k] >> 4)
+    return dout
+
+def get_data2(fpga, chan):
+    chan = 4-1-chan
     ss = fpga.snapshots['data_ss_snapshot%d' % chan]
     x, t = ss.read_raw(man_trig=True, man_valid=True)
     nwords = x['length'] // 2
     d = struct.unpack('>%dH'  % nwords, x['data'])
-    return d
+    data = []
+    for i in range(nwords):
+        if (i % 8) == 0:
+            continue
+        if ((i+1) % 8) == 0:
+            continue
+        data += [d[i]]
+    return data
+
+def get_fft_data(fpga, chan):
+    x = get_data(fpga, chan)
+    X = np.fft.rfft(x)
+    p = np.abs(X)**2
+    return p
+
+def acc_fft(fpga, chan, N):
+    p = get_fft_data(fpga, chan)
+    for i in range(1,N):
+        p += get_fft_data(fpga, chan)
+    return p
 
 if __name__ == "__main__":
     fpga = casperfpga.CasperFpga('local', transport=casperfpga.LocalPcieTransport)
@@ -232,6 +267,8 @@ if __name__ == "__main__":
     dts = Dts(fpga, 'vla_dts')
     dts.set_lane_map(LANE_MAP)
     dts.reset_delays()
+    #dts.delay_stream(0)
+    #dts.advance_stream(0)
     dts.unmute()
     print('Locked:')
     locked = fpga.read_uint('locked')
@@ -246,6 +283,15 @@ if __name__ == "__main__":
     for y in x: print(y)
     print('Sync:')
     print_sync(fpga, locked=locked)
-    for i in range(8): # loop over IFs
-        print(" ".join(["%.4x" % n for n in get_data(fpga, i)[0:12]]))
-    print(fpga.estimate_fpga_clock())
+    for i in range(4): # loop over IFs
+        print(" ".join(["%.4x" % (n & 0xffff) for n in get_data(fpga, i)[0:12]]))
+    for i in range(4): # loop over IFs
+        print(" ".join(["%5d" % n for n in get_data(fpga, i)[0:12]]))
+    d = []
+    for i in range(100):
+        d += get_data(fpga,0)
+    print('RMS:', np.sqrt(np.var(d)))
+    print('MEAN:', np.mean(d))
+    power = acc_fft(fpga, 0, 256)
+    plt.semilogy(power); plt.savefig('fig.png')
+    #print(fpga.estimate_fpga_clock())
