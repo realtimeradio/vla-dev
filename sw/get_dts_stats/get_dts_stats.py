@@ -250,8 +250,8 @@ def get_data(fpga, chan):
     #        # Do nothing
     #        d[4*i+j::16] = d_flipped[4*i+j::16]
     d = (d + 128) % 256
-    d[d>128] -= 256
-    return d
+    d[d>=128] -= 256
+    return d#[0:16]
     #data = np.zeros_like(d)
     #for i in range(nwords):
     #    if (i % 8) == 0:
@@ -282,19 +282,25 @@ def acc_fft(fpga, chan, N):
         p += get_fft_data(fpga, chan)
     return p
 
+#DTSS = ['vla_dts']
+DTSS = ['dts_firefly0_vla_dts0', 'dts_firefly0_vla_dts1']
+LOCKREGS = ['dts_firefly0_ss0_locked', 'dts_firefly0_ss1_locked']
+
 if __name__ == "__main__":
     fpga = casperfpga.CasperFpga('local', transport=casperfpga.LocalPcieTransport)
     
     fpga.get_system_information(sys.argv[1])
 
-    dts = Dts(fpga, 'vla_dts')
+    dts = Dts(fpga, DTSS[0])
     dts.set_lane_map(LANE_MAP)
     dts.reset_delays()
     #dts.delay_stream(0)
     #dts.advance_stream(0)
     dts.unmute()
-    print('Locked:')
-    locked = fpga.read_uint('locked')
+    for ln, lockreg in enumerate(LOCKREGS):
+        print('%d Locked:' % ln)
+        locked = fpga.read_uint(LOCKREGS[ln])
+        print(locked)
     print(np.binary_repr(locked, width=12))
     print('Locked (Internal Flag):')
     print(np.binary_repr(dts.get_lock_state(), width=12))
@@ -313,14 +319,15 @@ if __name__ == "__main__":
         print("Channel %d:" % i)
         print(" ".join(["%5d" % n for n in get_data(fpga, i)[0:12]]))
     d = np.array([])
-    for i in range(100):
-        d = np.concatenate((d, get_data(fpga,0)))
+    #for i in range(100):
+    #    d = np.concatenate((d, get_data(fpga,0)))
+    d = get_data(fpga,0)
     print('RMS:', np.sqrt(np.var(d)))
     print('MEAN:', np.mean(d))
     x = get_data(fpga, 0)
     angles = []
     for i in range(256):
-        angles += [get_complex_fft_data(x, i, 1)]
+        angles += [get_complex_fft_data(x, i, 16*32)]
     print(angles)
     power = acc_fft(fpga, 0, 128)
     plt.figure()
