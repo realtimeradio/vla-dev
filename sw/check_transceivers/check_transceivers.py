@@ -37,8 +37,8 @@ for qsfp in qsfps:
 
 for mux, qsfp in mux_qsfps:
     for i in range(4):
-        mux.set_output(1<<i) 
         try:
+            mux.set_output(1<<i) 
             stat = qsfp.get_status()
             print('%s status (mux %d):' % (qsfp.itf.controller_name, i))
             for k, v in stat.items():
