@@ -7,5 +7,6 @@ startsg.local
 
 # build directories
 adm_pcie_9h7_dts_test/
+adm_pcie_9h7_dts_dual_2x100g/
 adm_pcie_9h7_dts_led_test/
 
