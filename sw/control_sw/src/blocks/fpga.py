@@ -160,9 +160,6 @@ class Fpga(Block):
         stats = {}
         flags = {}
         stats['programmed'] = self.is_programmed()
-        meta = self.host.transport.get_metadata()
-        stats['flash_firmware'] = meta['filename']
-        stats['flash_firmware_md5'] = meta['md5sum']
         stats['timestamp'] = datetime.datetime.now().isoformat()
         stats['serial'] = self.serial
         stats['host'] = self.host.host
