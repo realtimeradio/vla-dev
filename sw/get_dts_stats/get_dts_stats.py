@@ -283,8 +283,10 @@ def acc_fft(fpga, chan, N):
     return p
 
 #DTSS = ['vla_dts']
-DTSS = ['dts_firefly0_vla_dts0', 'dts_firefly0_vla_dts1']
-LOCKREGS = ['dts_firefly0_ss0_locked', 'dts_firefly0_ss1_locked']
+#DTSS = ['dts_firefly0_vla_dts0', 'dts_firefly0_vla_dts1']
+#LOCKREGS = ['dts_firefly0_ss0_locked', 'dts_firefly0_ss1_locked']
+DTSS = ['pipeline0_dts_dts', 'pipeline1_dts_dts']
+LOCKREGS = ['pipeline0_dts_stats_locked', 'pipeline1_dts_stats_locked']
 
 if __name__ == "__main__":
     fpga = casperfpga.CasperFpga('local', transport=casperfpga.LocalPcieTransport)

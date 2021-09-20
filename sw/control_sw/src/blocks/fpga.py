@@ -3,8 +3,8 @@ import time
 import datetime
 
 from .block import Block
-from lwa_f.error_levels import *
-from lwa_f import __version__
+from cosmic_f.error_levels import *
+from cosmic_f import __version__
 
 import casperfpga.sysmon
 
