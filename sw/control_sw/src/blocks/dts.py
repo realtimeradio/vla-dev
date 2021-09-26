@@ -1,24 +1,14 @@
-import sys
-import struct
-import numpy as np
-from matplotlib import pyplot as plt
+from .block import Block
 
-import casperfpga
-from casperfpga import i2c, i2c_sfp
-
-#LANE_MAP = range(12)
-#LANE_MAP = [4, 0, 5, 1, 2, 3, 6, 7, 8, 9, 10, 11]
-LANE_MAP = [0, 4, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4]
-#LANE_MAP = [4 for _ in range(12)]
-
-class Dts():
+class Dts(Block):
     REG_ADDRESS_CR = 0x0 # Control Register
     REG_ADDRESS_PC = 0x1 # Parity count
     REG_ADDRESS_SC = 0x2 # Scramble Code
     REG_ADDRESS_MD = 0x3 # Meta Data
     REG_ADDRESS_TM = 0x4 # Timing Register
     NREG = 5
-    def __init__(self, fpga, regname, nlanes=12):
+    def __init__(self, fpga, regname, nlanes=12, logger=None):
+        super(Dts, self).__init__(fpga, name, logger)
         self.fpga = fpga
         self.reg = regname
         self.nlanes = nlanes
@@ -281,59 +271,3 @@ def acc_fft(fpga, chan, N):
     for i in range(1,N):
         p += get_fft_data(fpga, chan)
     return p
-
-#DTSS = ['vla_dts']
-#DTSS = ['dts_firefly0_vla_dts0', 'dts_firefly0_vla_dts1']
-#LOCKREGS = ['dts_firefly0_ss0_locked', 'dts_firefly0_ss1_locked']
-DTSS = ['pipeline0_dts_dts', 'pipeline1_dts_dts']
-LOCKREGS = ['pipeline0_dts_stats_locked', 'pipeline1_dts_stats_locked']
-
-if __name__ == "__main__":
-    fpga = casperfpga.CasperFpga('local', transport=casperfpga.LocalPcieTransport)
-    
-    fpga.get_system_information(sys.argv[1])
-
-    dts = Dts(fpga, DTSS[0])
-    dts.set_lane_map(LANE_MAP)
-    dts.reset_delays()
-    #dts.delay_stream(0)
-    #dts.advance_stream(0)
-    dts.unmute()
-    for ln, lockreg in enumerate(LOCKREGS):
-        print('%d Locked:' % ln)
-        locked = fpga.read_uint(LOCKREGS[ln])
-        print(locked)
-    print(np.binary_repr(locked, width=12))
-    print('Locked (Internal Flag):')
-    print(np.binary_repr(dts.get_lock_state(), width=12))
-    print('Parity Errors')
-    x = dts.get_parity_errs()
-    for y in x: print(y)
-    print('Metadata')
-    x= dts.get_meta_data()
-    for y in x: print(y)
-    print('Sync:')
-    print_sync(fpga, locked=locked)
-    for i in range(4): # loop over IFs
-        print("Channel %d:" % i)
-        print(" ".join(["0x%.4x" % (n & 0xffff) for n in get_data(fpga, i)[0:12]]))
-    for i in range(4): # loop over IFs
-        print("Channel %d:" % i)
-        print(" ".join(["%5d" % n for n in get_data(fpga, i)[0:12]]))
-    d = np.array([])
-    #for i in range(100):
-    #    d = np.concatenate((d, get_data(fpga,0)))
-    d = get_data(fpga,0)
-    print('RMS:', np.sqrt(np.var(d)))
-    print('MEAN:', np.mean(d))
-    x = get_data(fpga, 0)
-    angles = []
-    for i in range(256):
-        angles += [get_complex_fft_data(x, i, 16*32)]
-    print(angles)
-    power = acc_fft(fpga, 0, 128)
-    plt.figure()
-    plt.semilogy(power); plt.savefig('pow.png')
-    plt.figure()
-    plt.plot(d[0:200]); plt.savefig('volt.png')
-    #print(fpga.estimate_fpga_clock())
