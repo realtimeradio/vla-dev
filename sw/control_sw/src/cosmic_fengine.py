@@ -62,9 +62,9 @@ class CosmicFengine():
 
         #: QSFP ports
         self.qsfp_a      = qsfp.Qsfp(self._cfpga, 'qsfpa')
-        self.qsfp_b      = qsfp.Qsfp(self._cfpga, 'qsfpa')
-        self.qsfp_c      = qsfp.Qsfp(self._cfpga, 'qsfpa')
-        self.qsfp_d      = qsfp.Qsfp(self._cfpga, 'qsfpa')
+        self.qsfp_b      = qsfp.Qsfp(self._cfpga, 'qsfpb')
+        self.qsfp_c      = qsfp.Qsfp(self._cfpga, 'qsfpc')
+        self.qsfp_d      = qsfp.Qsfp(self._cfpga, 'qsfpd')
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
