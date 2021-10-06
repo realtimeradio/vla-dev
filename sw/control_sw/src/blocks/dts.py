@@ -1,4 +1,8 @@
 from .block import Block
+from cosmic_f.error_levels import *
+import numpy as np
+
+LANE_MAP = [0, 4, 5, 1, 2, 3, 6, 7, 8, 9, 10, 11]
 
 class Dts(Block):
     REG_ADDRESS_CR = 0x0 # Control Register
@@ -7,20 +11,19 @@ class Dts(Block):
     REG_ADDRESS_MD = 0x3 # Meta Data
     REG_ADDRESS_TM = 0x4 # Timing Register
     NREG = 5
-    def __init__(self, fpga, regname, nlanes=12, logger=None):
+    def __init__(self, fpga, name, nlanes=12, logger=None):
         super(Dts, self).__init__(fpga, name, logger)
         self.fpga = fpga
-        self.reg = regname
         self.nlanes = nlanes
         self.regval = [None for i in range(self.NREG)]
         for i in range(self.NREG): self._write_reg(0, i)
 
     def _read_reg(self, regoffset=0):
-        return self.fpga.read_uint(self.reg, word_offset=regoffset)
+        return self.read_uint('dts', word_offset=regoffset)
 
     def _write_reg(self, val, regoffset):
         self.regval[regoffset] = val
-        self.fpga.write_int(self.reg, val, word_offset=regoffset, blindwrite=True)
+        self.write_int('dts', val, word_offset=regoffset, blindwrite=True)
 
     def _change_reg_bits(self, val, offset, nbits, regoffset=0):
         orig = self.regval[regoffset]
@@ -75,6 +78,9 @@ class Dts(Block):
 
     def get_lock_state(self):
         return (self._read_reg(0) >> 8) & (2**self.nlanes - 1)
+
+    def get_gty_lock_state(self):
+        return (self._read_reg(0) >> (8+self.nlanes)) & (2**self.nlanes - 1)
 
     def advance_stream(self, stream):
         v = (1<<stream)
@@ -200,14 +206,54 @@ class Dts(Block):
         self.set_cs(None)
         return dout
 
-def get_sync(fpga):
-    x = fpga.snapshots.sync_snapshot.read(man_trig=True, man_valid=True)
-    return x['data']
+    def get_status(self, lanes='all'):
+        if lanes == 'all':
+            lanes = range(self.nlanes)
+        x = self.get_meta_data()
+        gty_lock = self.get_gty_lock_state()
+        dts_lock = self.get_lock_state()
+        stats = {}
+        flags = {}
+        for i in lanes:
+            for k, v in x[i].items():
+                lk = "lane%d:%s" % (i,k)
+                stats[lk] = v
+                if k == "pll_lock0" and v != 0b11:
+                    flags[lk] = FENG_ERROR
+            lk = "lane%d:gty_lock" % (i)
+            stats[lk] = (gty_lock >> i) & 1
+            if not stats[lk]:
+                flags[lk] = FENG_ERROR
+            lk = "lane%d:dts_lock" % (i)
+            stats[lk] = (dts_lock >> i) & 1
+            if not stats[lk]:
+                flags[lk] = FENG_ERROR
 
-def print_sync(fpga, locked=0xfff):
-    x = get_sync(fpga)
-    for dn, d in enumerate(x['data'][0::4][0:32]):
-       print("%.4d" % dn, np.binary_repr(d & locked, width=12))
+        return stats, flags
+
+    def initialize(self, read_only=False):
+        if read_only:
+            return
+        self.set_lane_map(LANE_MAP)
+
+    def get_snapshot_sync(self):
+        x = self.fpga.snapshots[self.prefix + 'stats_sync_snapshot'].read(man_trig=True, man_valid=True)
+        return x['data']
+
+    def get_snapshot_pps(self):
+        x = self.fpga.snapshots[self.prefix + 'stats_pps_snapshot'].read(man_trig=True, man_valid=True)
+        return x['data']
+
+    def get_pps_oos_count(self):
+        return self.read_uint('stats_pps_out_of_sync_count')
+
+    def get_ten_sec_oos_count(self):
+        return self.read_uint('stats_ten_sec_out_of_sync_count')
+
+    def print_sync(self, locked=0xfff):
+        x = self.get_snapshot_sync()
+        for dn, d in enumerate(x['data'][0::4][0:64]):
+           print("%.4d" % dn, np.binary_repr(d & locked, width=12))
 
 #def get_data(fpga, chan):
 #    chan = 4-1-chan

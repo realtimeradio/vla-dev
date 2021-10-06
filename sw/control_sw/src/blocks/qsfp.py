@@ -1,5 +1,6 @@
 from .block import Block
 from casperfpga import i2c, i2c_sfp
+from cosmic_f.error_levels import *
 
 class Qsfp(Block):
     def __init__(self, host, name, logger=None):
@@ -8,6 +9,11 @@ class Qsfp(Block):
         self._qsfp = i2c_sfp.Sfp(self._i2c)
 
     def get_status(self):
-        stats = self._qsfp.get_status()
-        flags = {}
+        try:
+            stats = self._qsfp.get_status()
+            stats['connected'] = True
+            flags = {}
+        except OSError:
+            stats = {'connected': False}
+            flags = {'connected': FENG_ERROR}
         return stats, flags
