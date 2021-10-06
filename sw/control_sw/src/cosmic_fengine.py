@@ -79,6 +79,7 @@ class CosmicFengine():
             'qsfp_b'      : self.qsfp_b,
             'qsfp_c'      : self.qsfp_c,
             'qsfp_d'      : self.qsfp_d,
+            'dts'         : self.dts,
         }
 
     def initialize(self, read_only=True):

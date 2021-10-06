@@ -1,6 +1,8 @@
+import struct
+import numpy as np
+
 from .block import Block
 from cosmic_f.error_levels import *
-import numpy as np
 
 LANE_MAP = [0, 4, 5, 1, 2, 3, 6, 7, 8, 9, 10, 11]
 
@@ -254,6 +256,29 @@ class Dts(Block):
         x = self.get_snapshot_sync()
         for dn, d in enumerate(x['data'][0::4][0:64]):
            print("%.4d" % dn, np.binary_repr(d & locked, width=12))
+
+    def get_snapshot_data(self, band):
+        ss = self.fpga.snapshots[self.prefix + 'stats_data_ss_snapshot%d' % band]
+        x, t = ss.read_raw(man_trig=True, man_valid=True)
+        nwords = x['length'] // 2
+        # 8-bit DTS data are cast to 12-bits by the interface, and then cast to 16-bits
+        # by the snapshot. So shift out 8 unused bits
+        d = np.array(struct.unpack('>%dH' % nwords, x['data'])) >> 8
+        # Convert offset binary to 2's complement
+        d = (d + 128) % 256
+        d[d>=128] -= 256
+        return d
+
+    def get_bit_stats(self, band):
+        d = self.get_snapshot_data(band)
+        mean = np.mean(d)
+        var = np.var(d)
+        return mean, var, np.sqrt(var)
+
+    def get_histogram(self, band):
+        from matplotlib import pyplot as plt
+        plt.hist(self.get_snapshot_data(band), bins=range(-128,129))
+        plt.show()
 
 #def get_data(fpga, chan):
 #    chan = 4-1-chan
