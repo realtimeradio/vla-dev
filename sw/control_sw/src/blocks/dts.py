@@ -280,56 +280,21 @@ class Dts(Block):
         plt.hist(self.get_snapshot_data(band), bins=range(-128,129))
         plt.show()
 
-#def get_data(fpga, chan):
-#    chan = 4-1-chan
-#    dout = [0 for _ in range(4096)]
-#    for i in range(2):
-#        ss = fpga.snapshots['data_ss_snapshot%d' % (2*chan+i)]
-#        x, t = ss.read_raw(man_trig=True, man_valid=True)
-#        nwords = x['length'] // 2
-#        d = struct.unpack('>%dh'  % nwords, x['data'])
-#        # Reorder to account for ordering within 2 brams
-#        for j in range(nwords//4):
-#            for k in range(4):
-#                dout[8*j + 4*i + k] = (d[4*j + k] >> 4)
-#    return dout
+    def get_snapshot_fft(self, band, oversample_factor=1, use_window=True, start_index=0, decimation=1):
+        x = self.get_snapshot_data(band)[start_index::decimation]
+        if use_window:
+            window = np.sinc(np.linspace(-2*np.pi, 2*np.pi, x.shape[0]))
+            x = x*window
+        X = np.fft.rfft(x, x.shape[0]*oversample_factor)
+        p = np.abs(X)**2
+        return p
 
-def get_data(fpga, chan):
-    ss = fpga.snapshots['data_ss_snapshot%d' % chan]
-    x, t = ss.read_raw(man_trig=True, man_valid=True)
-    nwords = x['length'] // 2
-    d_flipped = np.array(struct.unpack('>%dH'  % nwords, x['data'])) >> 8
-    d = d_flipped#np.zeros_like(d_flipped)
-    #for i in range(4):
-    #    for j in range(4):
-    #        # Flip in chunks of 4 words and within 4 words
-    #        #d[4*i+j::16] = d_flipped[4*(3-i) +3-j::16]
-    #        # Flip in chunks of 4 words
-    #        #d[4*i+j::16] = d_flipped[4*(3-i) + j::16]
-    #        # Flip every 4 words
-    #        #d[4*i+j::16] = d_flipped[4*i + (3-j)::16]
-    #        # Do nothing
-    #        d[4*i+j::16] = d_flipped[4*i+j::16]
-    d = (d + 128) % 256
-    d[d>=128] -= 256
-    return d#[0:16]
-    #data = np.zeros_like(d)
-    #for i in range(nwords):
-    #    if (i % 8) == 0:
-    #        continue
-    #    if ((i+1) % 8) == 0:
-    #        continue
-    #    data += [d[i]]
-    #return data
+    def get_accumulated_fft(self, band, N, **kwargs):
+        p = self.get_snapshot_fft(band, **kwargs)
+        for i in range(1, N):
+            p += self.get_snapshot_fft(band, **kwargs)
+        return p
 
-def get_fft_data(fpga, chan, oversample_factor=1, use_window=True):
-    x = get_data(fpga, chan)
-    if use_window:
-        window = np.sinc(np.linspace(-2*np.pi, 2*np.pi, x.shape[0]))
-        x = x*window
-    X = np.fft.rfft(x, x.shape[0]*oversample_factor)
-    p = np.abs(X)**2
-    return p
 
 def get_complex_fft_data(x, index=0, step_size=16):
     X = np.fft.rfft(x[index::step_size], x.shape[0] // step_size)
@@ -337,8 +302,3 @@ def get_complex_fft_data(x, index=0, step_size=16):
     print("Index %2d, chan %d: Pow: %.3f; Phase %.3f" % (index, max_pow_bin, np.abs(X[max_pow_bin])**2, np.angle(X[max_pow_bin])))
     return np.angle(X[max_pow_bin])
 
-def acc_fft(fpga, chan, N):
-    p = get_fft_data(fpga, chan)
-    for i in range(1,N):
-        p += get_fft_data(fpga, chan)
-    return p
