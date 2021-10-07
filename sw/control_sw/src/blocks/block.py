@@ -251,7 +251,7 @@ class Block(object):
                 # just skip the write
                 raise
 
-    def change_reg_bits(self, reg, val, start, width=1):
+    def change_reg_bits(self, reg, val, start, width=1, word_offset=0, blindwrite=False):
         """
         Change certain bits of a register.
 
@@ -272,13 +272,19 @@ class Block(object):
   
         :param width: The number of bits to write.
         :type width: int
+
+        :param word_offset: Offset at which to write, in 32-bit words
+        :type word_offset: int
+
+        :param blindwrite: If True, don't read-back register contents after writing.
+        :type blindwrite: bool
         """
         if val >= (2**width):
             raise ValueError("Value %d will not fit in %d bit container" % (val, width))
-        orig_val = self.read_uint(reg)
+        orig_val = self.read_uint(reg, word_offset=word_offset)
         masked   = orig_val & (0xffffffff - ((2**width - 1) << start))
         new_val  = masked + (val << start)
-        self.write_int(reg, new_val)
+        self.write_int(reg, new_val, word_offset=word_offset, blindwrite=blindwrite)
 
     def get_reg_bits(self, reg, start, width=1):
         """

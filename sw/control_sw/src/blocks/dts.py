@@ -1,3 +1,4 @@
+import time
 import struct
 import numpy as np
 
@@ -62,6 +63,28 @@ class Dts(Block):
         self._set_read_strobe(0)
         self._set_read_strobe(1)
         self._set_read_strobe(0)
+
+    def set_reset(self, val):
+        self.write_int('rst', val)
+
+    def reset(self):
+        self.set_reset(0)
+        time.sleep(0.01)
+        self.set_reset(1)
+        time.sleep(0.01)
+        self.set_reset(0)
+
+    def get_pps_interval(self):
+        return self.read_uint('stats_pps_interval')
+
+    def get_pp10s_interval(self):
+        return self.read_uint('stats_ten_sec_interval')
+
+    def get_pps_count(self):
+        return self.read_uint('stats_pps_count')
+
+    def get_pp10s_count(self):
+        return self.read_uint('stats_ten_sec_count')
 
     def mute(self):
         self._change_ctrl_reg_bits(0, 18, 1)
@@ -250,13 +273,16 @@ class Dts(Block):
     def get_pps_oos_count(self):
         return self.read_uint('stats_pps_out_of_sync_count')
 
-    def get_ten_sec_oos_count(self):
+    def get_pp10s_sec_oos_count(self):
         return self.read_uint('stats_ten_sec_out_of_sync_count')
 
     def print_sync(self, locked=0xfff):
         x = self.get_snapshot_sync()
         for dn, d in enumerate(x['data'][0::4][0:64]):
            print("%.4d" % dn, np.binary_repr(d & locked, width=12))
+
+    def set_corruption_control(self, v):
+        self.change_reg_bits('dts', v, 0, 12, word_offset=5)
 
     def get_snapshot_data(self, band):
         ss = self.fpga.snapshots[self.prefix + 'stats_data_ss_snapshot%d' % band]
