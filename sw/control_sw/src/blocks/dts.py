@@ -14,34 +14,21 @@ class Dts(Block):
     _REG_ADDRESS_SC = 0x2 # Scramble Code
     _REG_ADDRESS_MD = 0x3 # Meta Data
     _REG_ADDRESS_TM = 0x4 # Timing Register
-    _NREG = 5
+
+    _WB_ADDR_META = 6
     def __init__(self, fpga, name, nlanes=12, logger=None):
         super(Dts, self).__init__(fpga, name, logger)
         self.fpga = fpga
         self.nlanes = nlanes
-        self.regval = [None for i in range(self._NREG)]
-        for i in range(self._NREG): self._write_reg(0, i)
 
     def _read_reg(self, regoffset=0):
         return self.read_uint('dts', word_offset=regoffset)
 
     def _write_reg(self, val, regoffset):
-        self.regval[regoffset] = val
-        self.write_int('dts', val, word_offset=regoffset, blindwrite=True)
-
-    def _change_reg_bits(self, val, offset, nbits, regoffset=0):
-        orig = self.regval[regoffset]
-        #print('reg was 0x%.8x' % orig)
-        masked = orig & (0xffffffff - ((2**nbits - 1)<<offset))
-        if val >= 2**nbits:
-            self._error('ERROR: cant write %d to a %d bit register field' % (val, nbits))
-            exit()
-        new = masked + (val << offset)
-        #print('now 0x%.8x' % new)
-        self._write_reg(new, regoffset)
+        self.write_int('dts', val, word_offset=regoffset)
 
     def _change_ctrl_reg_bits(self, val, offset, nbits):
-        self._change_reg_bits(val, offset, nbits, regoffset=0)
+        self.change_reg_bits('dts', val, offset, nbits)
 
     def _set_addr(self, addr):
         self._change_ctrl_reg_bits(addr, 8, 8)
@@ -100,13 +87,13 @@ class Dts(Block):
             self._change_ctrl_reg_bits(1<<chip, 19, 12)
 
     def _read_data(self):
-        return self._read_reg(0) & 0xff
+        return self._read_reg(self._WB_ADDR_META) & 0xff
 
     def get_lock_state(self):
-        return (self._read_reg(0) >> 8) & (2**self.nlanes - 1)
+        return (self._read_reg(self._WB_ADDR_META) >> 8) & (2**self.nlanes - 1)
 
     def get_gty_lock_state(self):
-        return (self._read_reg(0) >> (8+self.nlanes)) & (2**self.nlanes - 1)
+        return (self._read_reg(self._WB_ADDR_META) >> (8+self.nlanes)) & (2**self.nlanes - 1)
 
     def advance_stream(self, stream):
         v = (1<<stream)
@@ -261,7 +248,7 @@ class Dts(Block):
         locked = self.get_lock_state()
         while(locked != 2**self.nlanes - 1):
             if time.time() - t0 > _LOCK_TIMEOUT_SECS:
-                self._warning("Failed to lock after %.1f seconds" % _LOCK_TIMEOUT_SECONDS)
+                self._warning("Failed to lock after %.1f seconds" % _LOCK_TIMEOUT_SECS)
                 break
             time.sleep(0.1)
             locked = self.get_lock_state()
@@ -327,6 +314,9 @@ class Dts(Block):
             self._error("Failed to find reference sync point")
             raise
         for lane in range(self.nlanes):
+            if not use_lane[lane]:
+                self._info("Skipping lane %d because it wasn't locked" % lane)
+                continue
             if lane == ref_lane:
                 self._info("Lane %d is the sync reference" % lane)
                 continue
