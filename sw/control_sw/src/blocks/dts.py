@@ -7,18 +7,18 @@ from cosmic_f.error_levels import *
 LANE_MAP = [0, 4, 5, 1, 2, 3, 6, 7, 8, 9, 10, 11]
 
 class Dts(Block):
-    REG_ADDRESS_CR = 0x0 # Control Register
-    REG_ADDRESS_PC = 0x1 # Parity count
-    REG_ADDRESS_SC = 0x2 # Scramble Code
-    REG_ADDRESS_MD = 0x3 # Meta Data
-    REG_ADDRESS_TM = 0x4 # Timing Register
-    NREG = 5
+    _REG_ADDRESS_CR = 0x0 # Control Register
+    _REG_ADDRESS_PC = 0x1 # Parity count
+    _REG_ADDRESS_SC = 0x2 # Scramble Code
+    _REG_ADDRESS_MD = 0x3 # Meta Data
+    _REG_ADDRESS_TM = 0x4 # Timing Register
+    _NREG = 5
     def __init__(self, fpga, name, nlanes=12, logger=None):
         super(Dts, self).__init__(fpga, name, logger)
         self.fpga = fpga
         self.nlanes = nlanes
-        self.regval = [None for i in range(self.NREG)]
-        for i in range(self.NREG): self._write_reg(0, i)
+        self.regval = [None for i in range(self._NREG)]
+        for i in range(self._NREG): self._write_reg(0, i)
 
     def _read_reg(self, regoffset=0):
         return self.read_uint('dts', word_offset=regoffset)
@@ -41,27 +41,27 @@ class Dts(Block):
     def _change_ctrl_reg_bits(self, val, offset, nbits):
         self._change_reg_bits(val, offset, nbits, regoffset=0)
 
-    def set_addr(self, addr):
+    def _set_addr(self, addr):
         self._change_ctrl_reg_bits(addr, 8, 8)
 
-    def set_data(self, data):
+    def _set_data(self, data):
         self._change_ctrl_reg_bits(data, 0, 8)
 
-    def set_read_strobe(self, v):
+    def _set_read_strobe(self, v):
         self._change_ctrl_reg_bits(v, 17, 1)
 
-    def set_write_strobe(self, v):
+    def _set_write_strobe(self, v):
         self._change_ctrl_reg_bits(v, 16, 1)
 
-    def toggle_write_strobe(self):
-        self.set_write_strobe(0)
-        self.set_write_strobe(1)
-        self.set_write_strobe(0)
+    def _toggle_write_strobe(self):
+        self._set_write_strobe(0)
+        self._set_write_strobe(1)
+        self._set_write_strobe(0)
 
-    def toggle_read_strobe(self):
-        self.set_read_strobe(0)
-        self.set_read_strobe(1)
-        self.set_read_strobe(0)
+    def _toggle_read_strobe(self):
+        self._set_read_strobe(0)
+        self._set_read_strobe(1)
+        self._set_read_strobe(0)
 
     def mute(self):
         self._change_ctrl_reg_bits(0, 18, 1)
@@ -69,13 +69,13 @@ class Dts(Block):
     def unmute(self):
         self._change_ctrl_reg_bits(1, 18, 1)
 
-    def set_cs(self, chip):
+    def _set_cs(self, chip):
         if chip is None:
             self._change_ctrl_reg_bits(0, 19, 12)
         else:
             self._change_ctrl_reg_bits(1<<chip, 19, 12)
 
-    def read_data(self):
+    def _read_data(self):
         return self._read_reg(0) & 0xff
 
     def get_lock_state(self):
@@ -112,50 +112,50 @@ class Dts(Block):
         self._write_reg(x >> 32, 3)
         print(hex(x >> 32))
 
-    def latch_parity_errs(self):
+    def _latch_parity_errs(self):
         for i in range(self.nlanes):
-            self.set_cs(None)
-            self.set_read_strobe(1)
-            self.set_addr(0)
-            self.set_data(1<<4)
-            self.set_cs(i)
-            self.toggle_write_strobe()
-        self.set_cs(None)
+            self._set_cs(None)
+            self._set_read_strobe(1)
+            self._set_addr(0)
+            self._set_data(1<<4)
+            self._set_cs(i)
+            self._toggle_write_strobe()
+        self._set_cs(None)
 
     def get_parity_errs(self):
-        #self.latch_parity_errs() 
+        #self._latch_parity_errs() 
         dout = []
         for i in range(self.nlanes):
             dts_dict = {}
-            self.set_cs(None)
-            self.set_read_strobe(0)
-            self.set_addr(self.REG_ADDRESS_PC)
-            self.set_cs(i) # causes edge on drb
+            self._set_cs(None)
+            self._set_read_strobe(0)
+            self._set_addr(self._REG_ADDRESS_PC)
+            self._set_cs(i) # causes edge on drb
             dts_dict = {
                 'time': 0,
                 'acc': 0,
                 'count': 0,
             }
             for j in range(3):
-                dts_dict['time'] += (self.read_data() << (8*(2-j)))
-                self.toggle_read_strobe()
+                dts_dict['time'] += (self._read_data() << (8*(2-j)))
+                self._toggle_read_strobe()
             for j in range(4):
-                dts_dict['acc'] += (self.read_data() << (8*(3-j)))
-                self.toggle_read_strobe()
+                dts_dict['acc'] += (self._read_data() << (8*(3-j)))
+                self._toggle_read_strobe()
             for j in range(2):
-                dts_dict['count'] += (self.read_data() << (8*(1-j)))
-                self.toggle_read_strobe()
+                dts_dict['count'] += (self._read_data() << (8*(1-j)))
+                self._toggle_read_strobe()
             dout += [dts_dict]
-        self.set_cs(None)
+        self._set_cs(None)
         return dout
 
     def get_meta_data2(self):
         for i in range(self.nlanes):
             print("meta %d:" % i)
-            self.set_cs(None)
-            self.set_read_strobe(0)
-            self.set_addr(self.REG_ADDRESS_MD)
-            self.set_cs(i) # causes edge on drb
+            self._set_cs(None)
+            self._set_read_strobe(0)
+            self._set_addr(self._REG_ADDRESS_MD)
+            self._set_cs(i) # causes edge on drb
             dts_dict = {
                 'antnum': None,
                 'ifnum': None,
@@ -167,19 +167,19 @@ class Dts(Block):
             }
             d = 0
             for j in range(4):
-                x = self.read_data()
-                self.toggle_read_strobe()
+                x = self._read_data()
+                self._toggle_read_strobe()
                 d += (x << (8*(3-j)))
             print("0x%.8x" %d)
-        self.set_cs(None)
+        self._set_cs(None)
 
     def get_meta_data(self):
         dout = []
         for i in range(self.nlanes):
-            self.set_cs(None)
-            self.set_read_strobe(0)
-            self.set_addr(self.REG_ADDRESS_MD)
-            self.set_cs(i) # causes edge on drb
+            self._set_cs(None)
+            self._set_read_strobe(0)
+            self._set_addr(self._REG_ADDRESS_MD)
+            self._set_cs(i) # causes edge on drb
             dts_dict = {
                 'antnum': None,
                 'ifnum': None,
@@ -189,23 +189,23 @@ class Dts(Block):
                 'pll_lock1': None,
                 'unused': None,
             }
-            x = self.read_data()
-            self.toggle_read_strobe()
+            x = self._read_data()
+            self._toggle_read_strobe()
             dts_dict['antnum'] = x
-            x = self.read_data()
-            self.toggle_read_strobe()
+            x = self._read_data()
+            self._toggle_read_strobe()
             dts_dict['ifnum'] = x >> 4
             dts_dict['chipnum'] = x & 0xf
-            x = self.read_data()
-            self.toggle_read_strobe()
+            x = self._read_data()
+            self._toggle_read_strobe()
             dts_dict['is3bit'] = x >> 4
             dts_dict['pll_lock0'] = x & 0xf
-            x = self.read_data()
-            self.toggle_read_strobe()
+            x = self._read_data()
+            self._toggle_read_strobe()
             dts_dict['pll_lock1'] = x >> 4
             dts_dict['unused'] = x & 0xf
             dout += [dts_dict]
-        self.set_cs(None)
+        self._set_cs(None)
         return dout
 
     def get_status(self, lanes='all'):
@@ -237,6 +237,7 @@ class Dts(Block):
         if read_only:
             return
         self.set_lane_map(LANE_MAP)
+        self.unmute()
 
     def get_snapshot_sync(self):
         x = self.fpga.snapshots[self.prefix + 'stats_sync_snapshot'].read(man_trig=True, man_valid=True)
@@ -294,11 +295,3 @@ class Dts(Block):
         for i in range(1, N):
             p += self.get_snapshot_fft(band, **kwargs)
         return p
-
-
-def get_complex_fft_data(x, index=0, step_size=16):
-    X = np.fft.rfft(x[index::step_size], x.shape[0] // step_size)
-    max_pow_bin = np.abs(X).argmax()
-    print("Index %2d, chan %d: Pow: %.3f; Phase %.3f" % (index, max_pow_bin, np.abs(X[max_pow_bin])**2, np.angle(X[max_pow_bin])))
-    return np.angle(X[max_pow_bin])
-
