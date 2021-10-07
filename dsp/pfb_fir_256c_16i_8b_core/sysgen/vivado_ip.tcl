@@ -54,7 +54,7 @@ lappend params_list CONFIG.Bypass_Sense {Active_Low}
 lappend params_list CONFIG.CE {true}
 lappend params_list CONFIG.C_In {false}
 lappend params_list CONFIG.C_Out {false}
-lappend params_list CONFIG.Implementation {DSP48}
+lappend params_list CONFIG.Implementation {Fabric}
 lappend params_list CONFIG.Latency {1}
 lappend params_list CONFIG.Out_Width {27}
 lappend params_list CONFIG.SCLR {false}

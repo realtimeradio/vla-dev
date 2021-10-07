@@ -3,7 +3,7 @@
     "design_info": {
       "boundary_crc": "0xEF372849C7BEDE60",
       "design_src": "SYSGEN",
-      "device": "xcku115-flvf1924-2-e",
+      "device": "xcvu37p-fsvh2892-2-e",
       "name": "pfb_fir_256c_16i_8b_core_bd",
       "synth_flow_mode": "Hierarchical",
       "tool_version": "2019.1.3",

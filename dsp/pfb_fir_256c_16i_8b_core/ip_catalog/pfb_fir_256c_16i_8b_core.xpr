@@ -6,8 +6,8 @@
 <Project Version="7" Minor="40" Path="/home/jackh/src/vla-dev/dsp/pfb_fir_256c_16i_8b_core/ip_catalog/pfb_fir_256c_16i_8b_core.xpr">
   <DefaultLaunch Dir="$PRUNDIR"/>
   <Configuration>
-    <Option Name="Id" Val="9926cda1917f4130b14ad7e07e615b8b"/>
-    <Option Name="Part" Val="xcku115-flvf1924-2-e"/>
+    <Option Name="Id" Val="8a9ff454f2d14e42afa028ce260ceede"/>
+    <Option Name="Part" Val="xcvu37p-fsvh2892-2-e"/>
     <Option Name="CompiledLibDir" Val="$PCACHEDIR/compile_simlib"/>
     <Option Name="CompiledLibDirXSim" Val=""/>
     <Option Name="CompiledLibDirModelSim" Val="$PCACHEDIR/compile_simlib/modelsim"/>
@@ -71,7 +71,7 @@
       <File Path="$PSRCDIR/sources_1/imports/hdl/pfb_fir_256c_16i_8b_core_bd_wrapper.vhd">
         <FileInfo>
           <Attr Name="ImportPath" Val="$PSRCDIR/sources_1/bd/pfb_fir_256c_16i_8b_core_bd/hdl/pfb_fir_256c_16i_8b_core_bd_wrapper.vhd"/>
-          <Attr Name="ImportTime" Val="1633100245"/>
+          <Attr Name="ImportTime" Val="1633104293"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
@@ -88,7 +88,7 @@
         <FileInfo>
           <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="ImportPath" Val="$PPRDIR/../sysgen/pfb_fir_256c_16i_8b_core_mod.vhd"/>
-          <Attr Name="ImportTime" Val="1633100243"/>
+          <Attr Name="ImportTime" Val="1633104290"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
@@ -103,7 +103,7 @@
       <File Path="$PSRCDIR/constrs_1/imports/sysgen/pfb_fir_256c_16i_8b_core_clock.xdc">
         <FileInfo>
           <Attr Name="ImportPath" Val="$PPRDIR/../sysgen/pfb_fir_256c_16i_8b_core_clock.xdc"/>
-          <Attr Name="ImportTime" Val="1633100221"/>
+          <Attr Name="ImportTime" Val="1633104264"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -111,7 +111,7 @@
       <File Path="$PSRCDIR/constrs_1/imports/sysgen/pfb_fir_256c_16i_8b_core.xdc">
         <FileInfo>
           <Attr Name="ImportPath" Val="$PPRDIR/../sysgen/pfb_fir_256c_16i_8b_core.xdc"/>
-          <Attr Name="ImportTime" Val="1633100221"/>
+          <Attr Name="ImportTime" Val="1633104264"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -164,7 +164,7 @@
     </Simulator>
   </Simulators>
   <Runs Version="1" Minor="10">
-    <Run Id="synth_1" Type="Ft3:Synth" SrcSet="sources_1" Part="xcku115-flvf1924-2-e" ConstrsSet="constrs_1" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" State="current" IncludeInArchive="true">
+    <Run Id="synth_1" Type="Ft3:Synth" SrcSet="sources_1" Part="xcvu37p-fsvh2892-2-e" ConstrsSet="constrs_1" Description="Vivado Synthesis Defaults" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" State="current" IncludeInArchive="true">
       <Strategy Version="1" Minor="2">
         <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2019"/>
         <Step Id="synth_design"/>
@@ -172,7 +172,7 @@
       <ReportStrategy Name="Vivado Synthesis Default Reports" Flow="Vivado Synthesis 2019"/>
       <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
     </Run>
-    <Run Id="impl_1" Type="Ft2:EntireDesign" Part="xcku115-flvf1924-2-e" ConstrsSet="constrs_1" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" State="current" SynthRun="synth_1" IncludeInArchive="true" GenFullBitstream="true">
+    <Run Id="impl_1" Type="Ft2:EntireDesign" Part="xcvu37p-fsvh2892-2-e" ConstrsSet="constrs_1" Description="Default settings for Implementation." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" State="current" SynthRun="synth_1" IncludeInArchive="true" GenFullBitstream="true">
       <Strategy Version="1" Minor="2">
         <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2019"/>
         <Step Id="init_design"/>
