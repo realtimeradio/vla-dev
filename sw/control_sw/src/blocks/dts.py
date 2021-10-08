@@ -6,6 +6,7 @@ from .block import Block
 from cosmic_f.error_levels import *
 
 LANE_MAP = [0, 4, 5, 1, 2, 3, 6, 7, 8, 9, 10, 11]
+_LOCK_TIMEOUT_SECS = 1
 
 class Dts(Block):
     _REG_ADDRESS_CR = 0x0 # Control Register
@@ -13,34 +14,21 @@ class Dts(Block):
     _REG_ADDRESS_SC = 0x2 # Scramble Code
     _REG_ADDRESS_MD = 0x3 # Meta Data
     _REG_ADDRESS_TM = 0x4 # Timing Register
-    _NREG = 5
+
+    _WB_ADDR_META = 6
     def __init__(self, fpga, name, nlanes=12, logger=None):
         super(Dts, self).__init__(fpga, name, logger)
         self.fpga = fpga
         self.nlanes = nlanes
-        self.regval = [None for i in range(self._NREG)]
-        for i in range(self._NREG): self._write_reg(0, i)
 
     def _read_reg(self, regoffset=0):
         return self.read_uint('dts', word_offset=regoffset)
 
     def _write_reg(self, val, regoffset):
-        self.regval[regoffset] = val
-        self.write_int('dts', val, word_offset=regoffset, blindwrite=True)
-
-    def _change_reg_bits(self, val, offset, nbits, regoffset=0):
-        orig = self.regval[regoffset]
-        #print('reg was 0x%.8x' % orig)
-        masked = orig & (0xffffffff - ((2**nbits - 1)<<offset))
-        if val >= 2**nbits:
-            print('ERROR: cant write %d to a %d bit register field' % (val, nbits))
-            exit()
-        new = masked + (val << offset)
-        #print('now 0x%.8x' % new)
-        self._write_reg(new, regoffset)
+        self.write_int('dts', val, word_offset=regoffset)
 
     def _change_ctrl_reg_bits(self, val, offset, nbits):
-        self._change_reg_bits(val, offset, nbits, regoffset=0)
+        self.change_reg_bits('dts', val, offset, nbits)
 
     def _set_addr(self, addr):
         self._change_ctrl_reg_bits(addr, 8, 8)
@@ -99,27 +87,25 @@ class Dts(Block):
             self._change_ctrl_reg_bits(1<<chip, 19, 12)
 
     def _read_data(self):
-        return self._read_reg(0) & 0xff
+        return self._read_reg(self._WB_ADDR_META) & 0xff
 
     def get_lock_state(self):
-        return (self._read_reg(0) >> 8) & (2**self.nlanes - 1)
+        return (self._read_reg(self._WB_ADDR_META) >> 8) & (2**self.nlanes - 1)
 
     def get_gty_lock_state(self):
-        return (self._read_reg(0) >> (8+self.nlanes)) & (2**self.nlanes - 1)
+        return (self._read_reg(self._WB_ADDR_META) >> (8+self.nlanes)) & (2**self.nlanes - 1)
 
     def advance_stream(self, stream):
         v = (1<<stream)
-        self._write_reg(0, 1)
-        self._write_reg(v, 1)
-        print(self._read_reg(1))
-        self._write_reg(0, 1)
+        self.write_int('dts', 0, word_offset=1)
+        self.write_int('dts', v, word_offset=1)
+        self.write_int('dts', 0, word_offset=1)
 
     def delay_stream(self, stream):
         v = (1<<stream)<<12
-        self._write_reg(0, 1)
-        self._write_reg(v, 1)
-        print(self._read_reg(1))
-        self._write_reg(0, 1)
+        self.write_int('dts', 0, word_offset=1)
+        self.write_int('dts', v, word_offset=1)
+        self.write_int('dts', 0, word_offset=1)
 
     def reset_delays(self):
         self._write_reg(0, 1)
@@ -131,9 +117,7 @@ class Dts(Block):
         for i in range(self.nlanes):
             x += (lanemap[i] << (4*i))
         self._write_reg(x & 0xffffffff, 2)
-        print(hex(x & 0xffffffff))
         self._write_reg(x >> 32, 3)
-        print(hex(x >> 32))
 
     def _latch_parity_errs(self):
         for i in range(self.nlanes):
@@ -259,16 +243,27 @@ class Dts(Block):
     def initialize(self, read_only=False):
         if read_only:
             return
+        self.reset()
+        t0 = time.time()
+        locked = self.get_lock_state()
+        while(locked != 2**self.nlanes - 1):
+            if time.time() - t0 > _LOCK_TIMEOUT_SECS:
+                self._warning("Failed to lock after %.1f seconds" % _LOCK_TIMEOUT_SECS)
+                break
+            time.sleep(0.1)
+            locked = self.get_lock_state()
+        self._info("Lock state: 0x%.3x" % locked)
         self.set_lane_map(LANE_MAP)
+        self.align_lanes()
         self.unmute()
 
     def get_snapshot_sync(self):
         x = self.fpga.snapshots[self.prefix + 'stats_sync_snapshot'].read(man_trig=True, man_valid=True)
-        return x['data']
+        return x['data']['data']
 
     def get_snapshot_pps(self):
         x = self.fpga.snapshots[self.prefix + 'stats_pps_snapshot'].read(man_trig=True, man_valid=True)
-        return x['data']
+        return x['data']['data']
 
     def get_pps_oos_count(self):
         return self.read_uint('stats_pps_out_of_sync_count')
@@ -276,10 +271,83 @@ class Dts(Block):
     def get_pp10s_sec_oos_count(self):
         return self.read_uint('stats_ten_sec_out_of_sync_count')
 
-    def print_sync(self, locked=0xfff):
-        x = self.get_snapshot_sync()
-        for dn, d in enumerate(x['data'][0::4][0:64]):
+    def print_sync(self, locked=0xfff, mux_factor=4):
+        x = self.get_snapshot_sync()[::mux_factor]
+        for dn, d in enumerate(x[0:64]):
            print("%.4d" % dn, np.binary_repr(d & locked, width=12))
+
+    def align_lanes(self, mux_factor=4):
+        locked = self.get_lock_state()
+        if locked == 0:
+            self._error("Can't align because no lanes are locked!")
+            raise RuntimeError
+        use_lane = [True] * self.nlanes
+        for lane in range(self.nlanes):
+            if not ((locked >> lane) & 1):
+                use_lane[lane] = False
+                self._warning("Not trying to align lane %d because it is not locked" % lane)
+        ref_lane = None
+        for lane in range(self.nlanes):
+            if use_lane[lane]:
+                ref_lane = lane
+                break
+        if ref_lane is None:
+            self._error("No reference lane found. This shouldn't happen!")
+            raise RuntimeError
+
+        # Function to extract a single bit from the locked vector
+        def extract_lane(lane, sync):
+            out = [(x >> lane) & 1 for x in sync]
+            return out
+
+        # Find reference point
+        lanes_sync = self.get_snapshot_sync()[::mux_factor]
+        sync_ref = extract_lane(ref_lane, lanes_sync)
+        try:
+            # Find the second positive edge of the sync, i.e., the sync after the
+            # first nosync after the first sync.
+            # This gives some room to ignore snapshot edge effects
+            first_sync = sync_ref.index(1)
+            first_nosync = sync_ref[first_sync+1 :].index(0) + first_sync + 1
+            ref_point = sync_ref[first_nosync+1 :].index(1) + first_nosync + 1
+        except ValueError:
+            self._error("Failed to find reference sync point")
+            raise
+        for lane in range(self.nlanes):
+            if not use_lane[lane]:
+                self._info("Skipping lane %d because it wasn't locked" % lane)
+                continue
+            if lane == ref_lane:
+                self._info("Lane %d is the sync reference" % lane)
+                continue
+            sync_lane = extract_lane(lane, lanes_sync)
+            # Find first sync at or after the reference
+            t_after = sync_lane[ref_point:].index(1)
+            # Find first sync at or before the reference
+            t_before = sync_lane[:ref_point+1][::-1].index(1)
+            if t_after == 0:
+                self._info("Lane %d is already in sync" % lane)
+                # Already in sync
+                continue
+            if t_after < t_before:
+                self._info("Advancing lane %d by %d steps" % (lane, t_after))
+                for i in range(t_after):
+                    self.advance_stream(lane)
+            else:
+                self._info("Delaying lane %d by %d steps" % (lane, t_before))
+                for i in range(t_before):
+                    self.delay_stream(lane)
+        synced = self.is_synced()
+        if not synced:
+            self._critical("Automatic lane syncing failed!")
+        return synced
+
+    def is_synced(self):
+        synced = self.get_snapshot_sync()
+        for v in synced:
+            if v != 0 and v != (2**self.nlanes-1):
+                return False
+        return True
 
     def set_corruption_control(self, v):
         self.change_reg_bits('dts', v, 0, 12, word_offset=5)
