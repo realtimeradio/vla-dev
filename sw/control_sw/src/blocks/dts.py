@@ -55,12 +55,18 @@ class Dts(Block):
     def set_reset(self, val):
         self.write_int('rst', val)
 
+    def reset_stats(self):
+        self.write_int('stats_rst', 1)
+        self.write_int('stats_rst', 0)
+
     def reset(self):
         self.set_reset(0)
         time.sleep(0.01)
         self.set_reset(1)
         time.sleep(0.01)
         self.set_reset(0)
+        time.sleep(0.1)
+        # self.reset_stats()
 
     def get_pps_interval(self):
         return self.read_uint('stats_pps_interval')
@@ -267,6 +273,9 @@ class Dts(Block):
 
     def get_pps_oos_count(self):
         return self.read_uint('stats_pps_out_of_sync_count')
+
+    def get_sync_oos_count(self):
+        return self.read_uint('stats_sync_out_of_sync_count')
 
     def get_pp10s_sec_oos_count(self):
         return self.read_uint('stats_ten_sec_out_of_sync_count')
