@@ -101,9 +101,15 @@ class Vacc(Block):
         :rtype: numpy.array
 
         """
-        d, t = self.host.snapshots[self.prefix + 'ss0'].read_raw()
-        x = struct.unpack('>%dQ' % (d['length'] // 8), d['data'])
-        return [np.array(x)]
+        self.host.snapshots[self.prefix + 'ss0_even'].arm()
+        d_even, t = self.host.snapshots[self.prefix + 'ss0_even'].read_raw(arm=False)
+        d_odd, t = self.host.snapshots[self.prefix + 'ss0_odd'].read_raw(arm=False)
+        x_even = np.array(struct.unpack('>%dQ' % (d_even['length'] // 8), d_even['data']))
+        x_odd = np.array(struct.unpack('>%dQ' % (d_odd['length'] // 8), d_odd['data']))
+        x = np.zeros(2*x_even.shape[0], dtype=np.uint64)
+        x[0::2] = x_even
+        x[1::2] = x_odd
+        return [x]
 
     def plot_spectra(self, db=True, show=True):
         """
