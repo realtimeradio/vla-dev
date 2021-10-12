@@ -399,6 +399,11 @@ class Dts(Block):
         p = np.abs(X)**2
         return p
 
+    def arm_pps(self):
+        self.write_int('arm', 0)
+        self.write_int('arm', 1)
+        self.write_int('arm', 0)
+
     def get_accumulated_fft(self, band, N, **kwargs):
         p = self.get_snapshot_fft(band, **kwargs)
         for i in range(1, N):

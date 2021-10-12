@@ -13,6 +13,8 @@ from .blocks import block
 from .blocks import fpga
 from .blocks import qsfp
 from .blocks import dts
+from .blocks import pfb
+from .blocks import vacc
 
 class CosmicFengine():
     """
@@ -69,6 +71,9 @@ class CosmicFengine():
 
         self.dts         = dts.Dts(self._cfpga, 'pipeline0_dts')
 
+        self.pfb         = pfb.Pfb(self._cfpga, 'pipeline0_pfb')
+        self.vacc        = vacc.Vacc(self._cfpga, 'pipeline0_vacc', n_chans=2**16)
+
         # The order here can be important, blocks are initialized in the
         # order they appear here
 
@@ -79,6 +84,8 @@ class CosmicFengine():
             'qsfp_b'      : self.qsfp_b,
             'qsfp_c'      : self.qsfp_c,
             'qsfp_d'      : self.qsfp_d,
+            'dts'         : self.dts,
+            'pfb'         : self.pfb,
             'dts'         : self.dts,
         }
 
