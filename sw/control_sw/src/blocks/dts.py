@@ -66,7 +66,7 @@ class Dts(Block):
         time.sleep(0.01)
         self.set_reset(0)
         time.sleep(0.1)
-        # self.reset_stats()
+        self.reset_stats()
 
     def get_pps_interval(self):
         return self.read_uint('stats_pps_interval')
@@ -277,6 +277,12 @@ class Dts(Block):
     def get_sync_oos_count(self):
         return self.read_uint('stats_sync_out_of_sync_count')
 
+    def get_sync_oos_count_per_lane(self):
+        rv = []
+        for i in range(self.nlanes):
+            rv += [self.read_uint('stats_Subsystem_%d_count' % i)] #TODO fix this name!
+        return rv
+
     def get_pp10s_sec_oos_count(self):
         return self.read_uint('stats_ten_sec_out_of_sync_count')
 
@@ -392,6 +398,11 @@ class Dts(Block):
         X = np.fft.rfft(x, x.shape[0]*oversample_factor)
         p = np.abs(X)**2
         return p
+
+    def arm_pps(self):
+        self.write_int('arm', 0)
+        self.write_int('arm', 1)
+        self.write_int('arm', 0)
 
     def get_accumulated_fft(self, band, N, **kwargs):
         p = self.get_snapshot_fft(band, **kwargs)
