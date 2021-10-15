@@ -92,7 +92,7 @@ class Vacc(Block):
                         x[subsignal*n_chans_per_stream:(subsignal+1)*n_chans_per_stream]
         return dout
 
-    def get_new_spectra(self):
+    def get_new_spectra(self, chan=0):
         """
         Get a new average power spectra.
 
@@ -101,9 +101,9 @@ class Vacc(Block):
         :rtype: numpy.array
 
         """
-        self.host.snapshots[self.prefix + 'ss0_even'].arm()
-        d_even, t = self.host.snapshots[self.prefix + 'ss0_even'].read_raw(arm=False)
-        d_odd, t = self.host.snapshots[self.prefix + 'ss0_odd'].read_raw(arm=False)
+        self.host.snapshots[self.prefix + 'ss%d_even' % chan].arm()
+        d_even, t = self.host.snapshots[self.prefix + 'ss%d_even' % chan].read_raw(arm=False)
+        d_odd, t = self.host.snapshots[self.prefix + 'ss%d_odd' % chan].read_raw(arm=False)
         x_even = np.array(struct.unpack('>%dQ' % (d_even['length'] // 8), d_even['data']))
         x_odd = np.array(struct.unpack('>%dQ' % (d_odd['length'] // 8), d_odd['data']))
         x = np.zeros(2*x_even.shape[0], dtype=np.uint64)
@@ -111,18 +111,11 @@ class Vacc(Block):
         x[1::2] = x_odd
         return [x]
 
-    def plot_spectra(self, db=True, show=True):
+    def plot_spectra(self, chan=0, db=True, show=True):
         """
         Plot the spectra of all signals in a single signal_block,
         with accumulation length divided out
         
-        :param signal_block: If using multiplexing, plot data for this signal
-            block. If not using multiplexing, this parameter does nothing, and
-            data from all inputs will be plotted.
-            When multiplexing, Each call will plot data for inputs
-            ``self.n_signals_per_block x signal_block`` to
-            ``self.n_signals_per_block x (signal_block+1) - 1``.
-
         :param db: If True, plot 10log10(power). Else, plot linear.
         :type db: bool
 
@@ -133,7 +126,7 @@ class Vacc(Block):
 
         """
         from matplotlib import pyplot as plt
-        specs = self.get_new_spectra()
+        specs = self.get_new_spectra(chan=chan)
         f, ax = plt.subplots(1,1)
         if db:
             ax.set_ylabel('Power [dB]')
