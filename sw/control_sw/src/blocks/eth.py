@@ -1,11 +1,11 @@
 import time
 
 from .block import Block
-from lwa_f.error_levels import *
+from cosmic_f.error_levels import *
 
 class Eth(Block):
     """
-    Instantiate a control interface for a 40 GbE block.
+    Instantiate a control interface for a 100 GbE block.
 
     :param host: CasperFpga interface for host.
     :type host: casperfpga.CasperFpga
@@ -16,7 +16,7 @@ class Eth(Block):
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
     """
-    _CORE_NAME = 'forty_gbe' #: 40G core name in simulink
+    _CORE_NAME = 'onehundred_gbe' #: 100G core name in simulink
     def __init__(self, host, name, logger=None):
         super(Eth, self).__init__(host, name, logger)
         self._get_eth_core()
@@ -60,7 +60,7 @@ class Eth(Block):
 
             - tx_of : Count of TX buffer overflow events.
             - tx_full : Count of TX buffer full events.
-            - tx_vld : Count of 64-bit words marked as valid for transmission.
+            - tx_vld : Count of 512-bit words marked as valid for transmission.
             - tx_ctr: Count of transmission End-of-Frames marked valid.
 
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
@@ -72,10 +72,11 @@ class Eth(Block):
         """
         stats = {}
         flags = {}
-        stats['tx_of'  ] = self.read_uint(self._CORE_NAME + '_txofctr')
-        stats['tx_full'] = self.read_uint(self._CORE_NAME + '_txfullctr')
-        stats['tx_vld' ] = self.read_uint(self._CORE_NAME + '_txvldctr')
-        stats['tx_ctr' ] = self.read_uint(self._CORE_NAME + '_txctr')
+
+        stats['tx_of'  ] = self.read_uint(self._CORE_NAME + '_gmac_reg_tx_overflow_count')
+        stats['tx_full'] = self.read_uint(self._CORE_NAME + '_gmac_reg_tx_almost_full_count')
+        stats['tx_vld' ] = self.read_uint(self._CORE_NAME + '_gmac_reg_tx_valid_count')
+        stats['tx_ctr' ] = self.read_uint(self._CORE_NAME + '_gmac_reg_tx_packet_count')
         if stats['tx_of'] > 0:
             flags['tx_of'] = FENG_ERROR
         if stats['tx_full'] > 0:

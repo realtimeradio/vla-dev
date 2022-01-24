@@ -15,6 +15,7 @@ from .blocks import qsfp
 from .blocks import dts
 from .blocks import pfb
 from .blocks import vacc
+from .blocks import eth
 
 class CosmicFengine():
     """
@@ -27,8 +28,9 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
-    def __init__(self, host, fpgfile, logger=None):
+    def __init__(self, host, fpgfile, pipeline_id=0, logger=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
+        self.pipeline_id = pipeline_id
         #: Python Logger instance
         self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(__name__ + ":%s" % (host)))
         #: Underlying CasperFpga control instance
@@ -69,10 +71,13 @@ class CosmicFengine():
         self.qsfp_c      = qsfp.Qsfp(self._cfpga, 'qsfpc')
         self.qsfp_d      = qsfp.Qsfp(self._cfpga, 'qsfpd')
 
-        self.dts         = dts.Dts(self._cfpga, 'pipeline0_dts')
+        self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id)
 
-        self.pfb         = pfb.Pfb(self._cfpga, 'pipeline0_pfb')
-        self.vacc        = vacc.Vacc(self._cfpga, 'pipeline0_vacc', n_chans=2**16)
+        self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id)
+        self.vacc        = vacc.Vacc(self._cfpga, 'pipeline%d_vacc' % self.pipeline_id, n_chans=2**16)
+
+        #: Control interface to 100GbE interface block
+        self.eth         = eth.Eth(self._cfpga, 'pipeline%d_eth0' % self.pipeline_id)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
@@ -87,6 +92,7 @@ class CosmicFengine():
             'dts'         : self.dts,
             'pfb'         : self.pfb,
             'dts'         : self.dts,
+            'eth'         : self.eth,
         }
 
     def initialize(self, read_only=True):
