@@ -4,18 +4,18 @@ from .block import Block
 from cosmic_f.error_levels import *
 
 class Pfb(Block):
-    DEFAULT_SHIFT = 0b0011011011111
+    #DEFAULT_SHIFT = 0b0011011011111
     def __init__(self, host, name, logger=None):
         super(Pfb, self).__init__(host, name, logger)
 
-    def set_fft_shift(self, shift):
-        """
-        Set the FFT shift schedule.
+    #def set_fft_shift(self, shift):
+    #    """
+    #    Set the FFT shift schedule.
 
-        :param shift: Shift schedule to be applied.
-        :type shift: int
-        """
-        self.write_int('fft_shift', shift)
+    #    :param shift: Shift schedule to be applied.
+    #    :type shift: int
+    #    """
+    #    self.write_int('fft_shift', shift)
 
     def get_fft_shift(self):
         """
@@ -25,7 +25,7 @@ class Pfb(Block):
         :return: Shift schedule
         :rtype: int
         """
-        return self.read_uint('fft_shift')
+        return 2**10 - 1 #self.read_uint('fft_shift')
 
     def get_overflow_count(self):
         """
@@ -75,4 +75,4 @@ class Pfb(Block):
         """
         if read_only:
             return
-        self.set_fft_shift(self.DEFAULT_SHIFT)
+        #self.set_fft_shift(self.DEFAULT_SHIFT)
