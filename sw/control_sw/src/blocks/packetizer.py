@@ -29,24 +29,35 @@ class Packetizer(Block):
     :param n_chans: Number of frequency channels in the correlation output.
     :type n_chans: int
 
-    :param n_signals: Number of independent analog streams in the system
+    :param n_signals: Number of independent analog streams in the system.
     :type n_signals: int
 
     :param sample_rate_mhz: ADC sample rate in MHz. Used for data rate checks.
     :type sample_rate_mhz: float
+
+    :param sample_width: Sample width in bytes (e.g. 4+4 bit complex = 1)
+    :type sample_width: int
+
+    :param word_width: Ethernet interface word width, in bytes
+    :type word_width: int
+
+    :param line_rate_gbps: Link speed in gigabits per seconds.
+    :type line_rate_gbps: float
+
+    :param n_time_packet: Number of time samples per packet
+    :type n_time_packet: int
     """
-    sample_width = 1 # Sample width in bytes: 4+4bit complex = 1 Byte
-    word_width = 32 # Granularity of packet size in Bytes
-    line_rate_gbps = 40 # Link speed in Gbits/s
-    def __init__(self, host, name, n_chans=4096, n_signals=64, sample_rate_mhz=200.0, logger=None):
+    def __init__(self, host, name, n_chans=4096, n_signals=64, sample_rate_mhz=200.0,
+            sample_width=1, word_width=64, line_rate_gbps=100., n_time_packet=16, logger=None):
         super(Packetizer, self).__init__(host, name, logger)
         self.n_chans = n_chans
         self.n_signals = n_signals
         self.sample_rate_mhz = sample_rate_mhz
+        self.sample_width = sample_width
+        self.word_width = word_width
+        self.line_rate_gbps = line_rate_gbps
         self.n_total_words = self.sample_width * self.n_chans * self.n_signals // self.word_width
         self.n_words_per_chan = self.sample_width * self.n_signals // self.word_width
-        assert self.n_words_per_chan > 1, \
-            "Packetizer software not compatible with n_signals / word_width combination"
         self.full_data_rate_gbps = 8*self.sample_width * self.n_signals * self.sample_rate_mhz*1e6/2. / 1.0e9
 
     def get_packet_info(self, n_pkt_chans, occupation=0.95, chan_block_size=8):

@@ -16,6 +16,8 @@ from .blocks import dts
 from .blocks import pfb
 from .blocks import vacc
 from .blocks import eth
+from .blocks import eq
+from .blocks import packetizer
 
 class CosmicFengine():
     """
@@ -78,6 +80,15 @@ class CosmicFengine():
 
         #: Control interface to 100GbE interface block
         self.eth         = eth.Eth(self._cfpga, 'pipeline%d_eth0' % self.pipeline_id)
+
+        #: Control interface to Equalization block
+        self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id, n_streams=4, n_coeffs=2**7)
+
+        #: Control interface to Packetizerblock
+        # 8 signals = 4 IFs (half of these aren't real)
+        self.packetizer = packetizer.Packetizer(self._cfpga, 'pipeline%d_packetizer' % self.pipeline_id,
+                            n_chans=512, n_signals=8, sample_rate_mhz=2048, sample_width=2, word_width=64,
+                            line_rate_gbps=100., n_time_packet=16)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
