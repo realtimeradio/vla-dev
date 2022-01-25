@@ -6,7 +6,6 @@ import time
 import sys
 import os
 import argparse
-from ata_snap import ata_control
 from subprocess import Popen
 
 RXBUF = 8500
@@ -59,7 +58,7 @@ try:
     tick = time.time()
     while(True):
         data = sock.recv(RXBUF)
-        if (n % 100000) == 0:
+        if (n % 1000) == 0:
             h, x, y = unpack(data)
             this_t = h['timestamp']
             print(time.ctime(), "Packets received:", n, "This packet:", this_t, "(Diff: %d)" % (this_t - last_t))
