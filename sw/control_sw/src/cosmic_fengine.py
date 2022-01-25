@@ -88,7 +88,7 @@ class CosmicFengine():
         # 8 signals = 4 IFs (half of these aren't real)
         self.packetizer = packetizer.Packetizer(self._cfpga, 'pipeline%d_packetizer' % self.pipeline_id,
                             n_chans=512, n_signals=8, sample_rate_mhz=2048, sample_width=2, word_width=64,
-                            line_rate_gbps=100., n_time_packet=16)
+                            line_rate_gbps=100., n_time_packet=16, packetizer_granularity=32)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here

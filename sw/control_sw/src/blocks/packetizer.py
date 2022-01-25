@@ -3,6 +3,25 @@ import struct
 
 from .block import Block
 
+def _ip_to_int(ip):
+    """
+    convert an IP string (eg '10.11.10.1') to a 32-bit binary
+    string, suitable for writing to an FPGA register.
+    """
+    octets = list(map(int, ip.split('.')))
+    ip_int = (octets[0] << 24) + (octets[1] << 16) + (octets[2] << 8) + octets[3]
+    return ip_int
+
+def _int_to_ip(ip):
+    """
+    convert an IP integer (eg 0x0a0a0a01) to an
+    IP string (eg '10.10.10.1')
+    """
+    sl = [] # list of parts to be joined with dots
+    for i in range(4):
+        sl += ["%d" % ((ip >> (8*(3-i))) & 0xff)]
+    return '.'.join(sl)
+
 class Packetizer(Block):
     """
     The packetizer block allows dynamic definition of
@@ -46,9 +65,13 @@ class Packetizer(Block):
 
     :param n_time_packet: Number of time samples per packet
     :type n_time_packet: int
+
+    :param packetizer_granularity: The number of words per packetizer data block.
+    :type packetizer_granularity: int
     """
     def __init__(self, host, name, n_chans=4096, n_signals=64, sample_rate_mhz=200.0,
-            sample_width=1, word_width=64, line_rate_gbps=100., n_time_packet=16, logger=None):
+            sample_width=1, word_width=64, line_rate_gbps=100., n_time_packet=16,
+            packetizer_granularity=32, logger=None):
         super(Packetizer, self).__init__(host, name, logger)
         self.n_chans = n_chans
         self.n_signals = n_signals
@@ -56,9 +79,103 @@ class Packetizer(Block):
         self.sample_width = sample_width
         self.word_width = word_width
         self.line_rate_gbps = line_rate_gbps
-        self.n_total_words = self.sample_width * self.n_chans * self.n_signals // self.word_width
+        self.n_total_words = sample_width * n_chans * n_signals * n_time_packet // word_width
         self.n_words_per_chan = self.sample_width * self.n_signals // self.word_width
         self.full_data_rate_gbps = 8*self.sample_width * self.n_signals * self.sample_rate_mhz*1e6/2. / 1.0e9
+        self.packetizer_granularity = packetizer_granularity
+
+    def _populate_headers(self, headers):
+        """
+        Populate the voltage mode packetizer header fields.
+
+        :param headers: A list of header dictionaries to populate
+        :type headers: list
+
+        Entry `i` of the `headers` list is written to packetizer header BRAM index `i`.
+        This represents the control word associated with the `i`th data sample block
+        after a sync pulse. Each data block is self.packetizer_granularity words.
+
+        Each `headers` entry should be a dictionary with the following fields:
+          - `first`: Boolean, indicating this sample block is the first in a packet.
+          - `valid`: Boolean, indicating this sample block contains valid data.
+          - `last`: Boolean, indicating this is the last valid sample block in a packet.
+          - `is_8_bit`: Boolean, indicating this packet contains 8-bit data.
+          - `is_time_fastest`: Boolean, indicating this packet has a payload in
+            channel [slowest] x time x polarization [fastest] order.
+          - `n_chans`: Integer, indicating the number of channels in this data block's packet.
+          - `chans`: list of ints, indicating the channels present in this data block. The zeroth element is the first channel in this block.
+          - `feng_id`: Integer, indicating the F-Engine ID of this block's data.
+            This is usually always `self.feng_id`, but may vary if one board is spoofing
+            traffic from multiple boards.
+          - `dest` : String, the destination IP of this data block (eg "10.10.10.100")
+        """
+
+        h_bytestr = b''
+        ip_bytestr = b''
+        port_bytestr = b''
+        for hn, h in enumerate(headers):
+            header_word = (int(h['last']) << 58) \
+                        + (int(h['valid']) << 57) \
+                        + (int(h['first']) << 56) \
+                        + (int(h['is_8_bit']) << 49) \
+                        + (int(h['is_time_fastest']) << 48) \
+                        + ((h['n_chans'] & 0xffff) << 32) \
+                        + ((h['chans'][0] & 0xffff) << 16) \
+                        + ((h['feng_id'] & 0xffff) << 0)
+            h_bytestr += struct.pack('>Q', header_word)
+            ip_bytestr += struct.pack('>I', _ip_to_int(h['dest']))
+            port_bytestr += struct.pack('>I', h['dest_port'])
+
+        self.write('ips', ip_bytestr)
+        self.write('header', h_bytestr)
+        self.write('ports', port_bytestr)
+
+    def _read_headers(self, n_words=None):
+        """
+        Get the header entries from one of this board's packetizers.
+
+        :return: headers
+        :rtype: list
+
+        Entry `i` of the `headers` list represents the contents of header BRAM index `i`.
+        This represents the control word associated with the `i`th data sample block
+        after a sync pulse. Each data block is self.packetizer_granularity words.
+
+        Each `headers` entry should be a dictionary with the following fields:
+          - `first`: Boolean, indicating this sample block is the first in a packet.
+          - `valid`: Boolean, indicating this sample block contains valid data.
+          - `last`: Boolean, indicating this is the last valid sample block in a packet.
+          - `is_8_bit`: Boolean, indicating this packet contains 8-bit data.
+          - `is_time_fastest`: Boolean, indicating this packet has a payload in
+            channel [slowest] x time x polarization [fastest] order.
+          - `n_chans`: Integer, indicating the number of channels in this data block's packet.
+          - `chans`: list of ints, indicating the channels present in this data block. The zeroth element is the first channel in this block.
+          - `feng_id`: Integer, indicating the F-Engine ID of this block's data.
+            This is usually always `self.feng_id`, but may vary if one board is spoofing
+            traffic from multiple boards.
+          - `dest` : String, the destination IP of this data block (eg "10.10.10.100")
+        """
+
+        if n_words is None:
+            n_words = self.n_total_words // self.packetizer_granularity
+        hs_raw = self.read('header', 8*n_words)
+        ips_raw = self.read('ips', 4*n_words)
+        hs = struct.unpack('>%dQ' % n_words, hs_raw)
+        ips = struct.unpack('>%dI' % n_words, ips_raw)
+
+        headers = []
+        for dn, d in enumerate(hs):
+            headers += [{}]
+            headers[-1]['feng_id'] = (d >> 0) & 0xffff
+            headers[-1]['chans'] = (d >> 16) & 0xffff
+            headers[-1]['n_chans'] = (d >> 32) & 0xffff
+            headers[-1]['is_time_fastest'] = bool((d >> 48) & 1)
+            headers[-1]['is_8_bit'] = bool((d >> 49) & 1)
+            headers[-1]['first'] = bool((d >> 56) & 1)
+            headers[-1]['valid'] = bool((d >> 57) & 1)
+            headers[-1]['last'] = bool((d >> 58) & 1)
+            headers[-1]['dest'] = _int_to_ip(ips[dn])
+        return headers
 
     def get_packet_info(self, n_pkt_chans, occupation=0.95, chan_block_size=8):
         """
