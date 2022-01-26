@@ -284,7 +284,7 @@ class Dts(Block):
         return self.read_uint('stats_sync_out_of_sync_count')
 
     def get_index_oos_count(self):
-        return self.read_uint('stats_index_out_of_index_count')
+        return self.read_uint('stats_index_out_of_sync_count')
 
     def get_sync_oos_count_per_lane(self):
         rv = []
