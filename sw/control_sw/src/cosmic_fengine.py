@@ -18,6 +18,7 @@ from .blocks import vacc
 from .blocks import eth
 from .blocks import eq
 from .blocks import packetizer
+from .blocks import autocorr
 
 FENG_UDP_SOURCE_PORT = 10000
 MAC_BASE = 0x020203030400
@@ -81,6 +82,10 @@ class CosmicFengine():
 
         self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id)
         self.vacc        = vacc.Vacc(self._cfpga, 'pipeline%d_vacc' % self.pipeline_id, n_chans=2**16)
+        #: Control interface for the autocorrelation block
+        self.autocorr = autocorr.AutoCorr(self._cfpga, 'pipeline%d_autocorr' % self.pipeline_id,
+                                        n_chans=2**9, n_signals=4, n_parallel_streams=1,
+                                        n_cores=4, use_mux=False)
 
         #: Control interface to 100GbE interface block
         self.eth         = eth.Eth(self._cfpga, 'pipeline%d_eth0' % self.pipeline_id)
