@@ -17,12 +17,14 @@ from .blocks import pfb
 from .blocks import vacc
 from .blocks import eth
 from .blocks import eq
+from .blocks import eqtvg
 from .blocks import packetizer
 from .blocks import autocorr
 
 FENG_UDP_SOURCE_PORT = 10000
 MAC_BASE = 0x020203030400
 IP_BASE = (100 << 24) + (100 << 16) + (101 << 8) + 10
+NCHANS = 512
 
 class CosmicFengine():
     """
@@ -81,37 +83,48 @@ class CosmicFengine():
         self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id)
 
         self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id)
-        self.vacc        = vacc.Vacc(self._cfpga, 'pipeline%d_vacc' % self.pipeline_id, n_chans=2**16)
-        #: Control interface for the autocorrelation block
-        self.autocorr = autocorr.AutoCorr(self._cfpga, 'pipeline%d_autocorr' % self.pipeline_id,
-                                        n_chans=2**9, n_signals=4, n_parallel_streams=1,
-                                        n_cores=4, use_mux=False)
+
+        #: Control interface for the Autocorrelation block
+        self.autocorr = autocorr.AutoCorr(self._cfpga,
+                'pipeline%d_autocorr' % self.pipeline_id,
+                n_chans=NCHANS, n_signals=4, n_parallel_streams=1,
+                n_cores=4, use_mux=False)
 
         #: Control interface to 100GbE interface block
         self.eth         = eth.Eth(self._cfpga, 'pipeline%d_eth0' % self.pipeline_id)
 
         #: Control interface to Equalization block
-        self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id, n_streams=4, n_coeffs=2**7)
+        self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id,
+                n_streams=4, n_coeffs=2**7)
+
+        #: Control interface to post-equalization Test Vector Generator block
+        self.eqtvg = eqtvg.EqTvg(self._cfpga, 'pipeline%d_post_eq_tvg' % self.pipeline_id,
+                n_streams=4, n_chans=NCHANS)
 
         #: Control interface to Packetizerblock
         # 8 signals = 4 IFs (only half are real)
-        self.packetizer = packetizer.Packetizer(self._cfpga, 'pipeline%d_packetizer' % self.pipeline_id,
-                            n_chans=512, n_signals=8, sample_rate_mhz=2048, sample_width=2, word_width=64,
-                            line_rate_gbps=100., n_time_packet=16, granularity=32)
+        self.packetizer = packetizer.Packetizer(self._cfpga,
+                'pipeline%d_packetizer' % self.pipeline_id,
+                n_chans=512, n_signals=8, sample_rate_mhz=2048,
+                sample_width=2, word_width=64, line_rate_gbps=100.,
+                n_time_packet=16, granularity=32)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
 
         #: Dictionary of all control blocks in the firmware system.
         self.blocks = {
-            'fpga'      : self.fpga,
+            'dts'         : self.dts,
+            'fpga'        : self.fpga,
             'qsfp_a'      : self.qsfp_a,
             'qsfp_b'      : self.qsfp_b,
             'qsfp_c'      : self.qsfp_c,
             'qsfp_d'      : self.qsfp_d,
             'dts'         : self.dts,
             'pfb'         : self.pfb,
-            'dts'         : self.dts,
+            'autocorr'    : self.autocorr,
+            'eq'          : self.eq,
+            'eqtvg'       : self.eqtvg,
             'eth'         : self.eth,
         }
 
