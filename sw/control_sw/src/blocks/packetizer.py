@@ -124,7 +124,7 @@ class Packetizer(Block):
                         + ((h['chans'][0] & 0xffff) << 16) \
                         + ((h['feng_id'] & 0xffff) << 0)
             h_bytestr += struct.pack('>Q', header_word)
-            ip_bytestr += struct.pack('>I', _ip_to_int(h['dest']))
+            ip_bytestr += struct.pack('>I', _ip_to_int(h['dest_ip']))
             port_bytestr += struct.pack('>I', h['dest_port'])
 
         self.write('ips', ip_bytestr)
@@ -154,28 +154,32 @@ class Packetizer(Block):
           - `feng_id`: Integer, indicating the F-Engine ID of this block's data.
             This is usually always `self.feng_id`, but may vary if one board is spoofing
             traffic from multiple boards.
-          - `dest` : String, the destination IP of this data block (eg "10.10.10.100")
+          - `dest_ip` : String, the destination IP of this data block (eg "10.10.10.100")
+          - `dest_port` : Integer, the destination IP of this data block
         """
 
         if n_words is None:
             n_words = self.n_total_words // self.granularity
         hs_raw = self.read('header', 8*n_words)
         ips_raw = self.read('ips', 4*n_words)
+        ports_raw = self.read('ports', 4*n_words)
         hs = struct.unpack('>%dQ' % n_words, hs_raw)
         ips = struct.unpack('>%dI' % n_words, ips_raw)
+        ports = struct.unpack('>%dI' % n_words, ports_raw)
 
         headers = []
         for dn, d in enumerate(hs):
             headers += [{}]
             headers[-1]['feng_id'] = (d >> 0) & 0xffff
-            headers[-1]['chans'] = (d >> 16) & 0xffff
+            headers[-1]['chans'] = [(d >> 16) & 0xffff]
             headers[-1]['n_chans'] = (d >> 32) & 0xffff
             headers[-1]['is_time_fastest'] = bool((d >> 48) & 1)
             headers[-1]['is_8_bit'] = bool((d >> 49) & 1)
             headers[-1]['first'] = bool((d >> 56) & 1)
             headers[-1]['valid'] = bool((d >> 57) & 1)
             headers[-1]['last'] = bool((d >> 58) & 1)
-            headers[-1]['dest'] = _int_to_ip(ips[dn])
+            headers[-1]['dest_ip'] = _int_to_ip(ips[dn])
+            headers[-1]['dest_port'] = ports[dn]
         return headers
 
     def get_packet_info(self, n_pkt_chans, occupation=0.95, chan_block_size=8):
@@ -196,7 +200,7 @@ class Packetizer(Block):
             I.e., packets must start on an n*`chan_block` boundary.
         :type chan_block_size: int
 
-        :return: packet_starts, packet_payloads, channel_indices
+        :return: packet_starts, packet_payloads, channel_indices, signal_numbers
 
             ``packet_starts`` : list of ints
                 The word indexes where packets start -- i.e., where headers should be
@@ -274,7 +278,7 @@ class Packetizer(Block):
         :type dest_ports: list of int
 
         :param nchans_per_packet: Number of frequency channels per packet sent.
-        :type nchans_per_packet: int
+        :type nchans_per_packet: list of int
 
         All parameters should have identical lengths.
         """

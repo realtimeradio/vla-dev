@@ -138,12 +138,15 @@ class Eth(Block):
         Initialize the block.
         See also: ``configure_source``, which sets transmission source attributes.
 
-        :param read_only: If False, reset error counters. If True, do nothing.
+        :param read_only: If False, reset error counters and disable and reset
+            core. If True, do nothing.
         :type read_only: bool
         """
         if read_only:
             return
         else:
+            self.disable_tx()
+            self.reset()
             self.status_reset()
 
     def configure_source(self, mac, ip, port):
