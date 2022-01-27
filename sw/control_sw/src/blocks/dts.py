@@ -274,7 +274,11 @@ class Dts(Block):
         return x['data']['data']
 
     def get_snapshot_pps(self):
-        x = self.fpga.snapshots[self.prefix + 'stats_pps_snapshot'].read(man_trig=True, man_valid=True)
+        x = self.fpga.snapshots[self.prefix + 'stats_pps_snapshot'].read(man_trig=False, man_valid=True)
+        return x['data']['data']
+
+    def get_snapshot_index(self):
+        x = self.fpga.snapshots[self.prefix + 'stats_index_snapshot'].read(man_trig=False, man_valid=True)
         return x['data']['data']
 
     def get_pps_oos_count(self):
