@@ -77,6 +77,12 @@ class Dts(Block):
     def get_pps_count(self):
         return self.read_uint('stats_pps_count')
 
+    def get_index_interval(self):
+        return self.read_uint('stats_index_interval')
+
+    def get_index_count(self):
+        return self.read_uint('stats_index_count')
+
     def get_pp10s_count(self):
         return self.read_uint('stats_ten_sec_count')
 
@@ -276,6 +282,9 @@ class Dts(Block):
 
     def get_sync_oos_count(self):
         return self.read_uint('stats_sync_out_of_sync_count')
+
+    def get_index_oos_count(self):
+        return self.read_uint('stats_index_out_of_index_count')
 
     def get_sync_oos_count_per_lane(self):
         rv = []
