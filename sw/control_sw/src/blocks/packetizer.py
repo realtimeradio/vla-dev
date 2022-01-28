@@ -270,7 +270,8 @@ class Packetizer(Block):
         :type ant_indices: list of ints
 
         :param dest_ips: list of str
-            IP addresses for each packet to be sent.
+            IP addresses for each packet to be sent. If an IP is '0.0.0.0',
+            the corresponding packet will be marked invalid.
         :type dest_ips:
 
         :param dest_ports:
@@ -312,7 +313,7 @@ class Packetizer(Block):
             b = packet_starts[p]
             headers[b]['first'] = True
             for j in packet_payloads[p]:
-                headers[j]['valid'] = True
+                headers[j]['valid'] = dest_ips[p] != '0.0.0.0'
                 headers[j]['n_chans'] = nchans_per_packet[p]
                 headers[j]['chans'] = channel_indices[p]
                 headers[j]['feng_id'] = antenna_indices[p]
