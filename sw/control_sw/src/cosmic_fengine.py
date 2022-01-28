@@ -27,6 +27,7 @@ MAC_BASE = 0x020203030400
 IP_BASE = (100 << 24) + (100 << 16) + (101 << 8) + 10
 NCHANS = 512
 NIFS = 2
+FPGA_CLOCK_RATE_HZ = 256000000
 
 class CosmicFengine():
     """
@@ -88,7 +89,9 @@ class CosmicFengine():
         self.fpga        = fpga.Fpga(self._cfpga, "")
 
         #: Control interface to timing sync block
-        self.sync        = sync.Sync(self._cfpga, 'pipeline%d_sync' % self.pipeline_id)
+        self.sync        = sync.Sync(self._cfpga,
+                'pipeline%d_sync' % self.pipeline_id,
+                clk_hz = FPGA_CLOCK_RATE_HZ)
 
         #: QSFP ports
         self.qsfp_a      = qsfp.Qsfp(self._cfpga, 'qsfpa')

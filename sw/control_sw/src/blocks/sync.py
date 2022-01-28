@@ -4,6 +4,21 @@ from numpy import log2
 from .block import Block
 
 class Sync(Block):
+    """
+    The Sync block controls internal timing signals.
+
+    :param host: CasperFpga interface for host.
+    :type host: casperfpga.CasperFpga
+
+    :param name: Name of block in Simulink hierarchy.
+    :type name: str
+
+    :param clk_hz: The FPGA clock rate at which the DSP fabric runs, in Hz.
+    :type clk_hz: int
+
+    :param logger: Logger instance to which log messages should be emitted.
+    :type logger: logging.Logger
+    """
     OFFSET_ACTIVE_HIGH = 0
     OFFSET_RST_TT_INT = 1
     OFFSET_MAN_LOAD_INT = 2
@@ -16,8 +31,9 @@ class Sync(Block):
     OFFSET_ARM_NOISE = 9
     OFFSET_TT_LOAD_ARM = 10
 
-    def __init__(self, host, name, logger=None):
+    def __init__(self, host, name, clk_hz=None, logger=None):
         super(Sync, self).__init__(host, name, logger)
+        self.clk_hz = clk_hz
     
     def uptime(self):
         """
@@ -33,7 +49,7 @@ class Sync(Block):
         :return: The number of FPGA clock ticks between the last two external sync pulses.
         :rtype int:
         """
-        return self.read_uint('ext_sync_period')
+        return self.read_uint('ext_sync_period')+1
 
     def count_ext(self):
         """
@@ -42,19 +58,19 @@ class Sync(Block):
         """
         return self.read_uint('ext_sync_count')
 
-    def count_pps(self):
-        """
-        :return: Number of external PPS pulses received.
-        :rtype int:
-        """
-        return self.read_uint('ext_pps_count')
+    #def count_pps(self):
+    #    """
+    #    :return: Number of external PPS pulses received.
+    #    :rtype int:
+    #    """
+    #    return self.read_uint('ext_pps_count')
 
-    def count_int(self):
-        """
-        :return: Number of internal sync pulses received.
-        :rtype int:
-        """
-        return self.read_uint('int_sync_count')
+    #def count_int(self):
+    #    """
+    #    :return: Number of internal sync pulses received.
+    #    :rtype int:
+    #    """
+    #    return self.read_uint('int_sync_count')
 
     def get_latency(self):
         """
@@ -84,29 +100,29 @@ class Sync(Block):
         """
         c = self.count_ext()
         while(self.count_ext() == c):
-            time.sleep(0.05)
+            time.sleep(0.0005)
 
-    def wait_for_pps(self, timeout=2.0):
-        """
-        Block until a PPS has been received.
+    #def wait_for_pps(self, timeout=2.0):
+    #    """
+    #    Block until a PPS has been received.
 
-        :param timeout: Timeout, in seconds, to wait.
-        :type timeout: float
+    #    :param timeout: Timeout, in seconds, to wait.
+    #    :type timeout: float
 
-        :return: least-significant 32-bits of telescope time of
-          last PPS pulse. Or, -1, on timeout.
-        :rtype int:
-        """
-        t0 = time.time()
-        c0 = self.read_uint('tt_lsb')
-        c1 = self.read_uint('tt_lsb')
-        while(c1 == c0):
-            c1 = self.read_uint('tt_lsb')
-            if time.time() > (t0 + timeout):
-                self._warning("Timed out waiting for PPS")
-                return -1
-            time.sleep(0.05)
-        return c1
+    #    :return: least-significant 32-bits of telescope time of
+    #      last PPS pulse. Or, -1, on timeout.
+    #    :rtype int:
+    #    """
+    #    t0 = time.time()
+    #    c0 = self.read_uint('tt_lsb')
+    #    c1 = self.read_uint('tt_lsb')
+    #    while(c1 == c0):
+    #        c1 = self.read_uint('tt_lsb')
+    #        if time.time() > (t0 + timeout):
+    #            self._warning("Timed out waiting for PPS")
+    #            return -1
+    #        time.sleep(0.05)
+    #    return c1
 
     def arm_sync(self):
         """
@@ -134,86 +150,90 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
 
-    def set_output_sync_rate(self, mask):
-        """
-        Set the output sync generation rate. A sync is issued
-        when the lower 32-bits of the telescope time counter,
-        masked with ``~mask`` == 0. I.e., a mask of 0 will
-        cause a sync every 2^32 clock cycles. A mask of 0xffff0000
-        will create an output pulse every 2^16 clock cycles.
-        Output sync pulses are extended by 256 clocks, so the output pulse rate
-        should be lower than this.
+    #def set_output_sync_rate(self, mask):
+    #    """
+    #    Set the output sync generation rate. A sync is issued
+    #    when the lower 32-bits of the telescope time counter,
+    #    masked with ``~mask`` == 0. I.e., a mask of 0 will
+    #    cause a sync every 2^32 clock cycles. A mask of 0xffff0000
+    #    will create an output pulse every 2^16 clock cycles.
+    #    Output sync pulses are extended by 256 clocks, so the output pulse rate
+    #    should be lower than this.
 
-        :param mask: Mask with which to bitwise AND the telescope time
-            counter before comparing to 0.
-        :type mask: int
-        """
-        self.write_int('tt_mask', mask)
+    #    :param mask: Mask with which to bitwise AND the telescope time
+    #        counter before comparing to 0.
+    #    :type mask: int
+    #    """
+    #    self.write_int('tt_mask', mask)
 
-    def update_telescope_time(self, fs_hz=196e6):
-        """
-        Arm PPS trigger receivers,
-        having loaded an appropriate telescope time.
+    #def update_telescope_time(self, fs_hz=None):
+    #    """
+    #    Arm PPS trigger receivers,
+    #    having loaded an appropriate telescope time.
 
-        :param fs_hz: The ADC clock rate, in Hz. Used to set the
-            telescope time counter.
-        :type fs_hz: int
+    #    :param fs_hz: The FPGA DSP clock rate, in Hz. Used to set the
+    #        telescope time counter. If None is provided, self.clk_hz will be used.
+    #    :type fs_hz: int
 
-        """
-        x = self.wait_for_pps()
-        has_pps = (x >= 0)
-        if not has_pps:
-            # Timed out, probably because this isn't the TT SNAP2 with PPS
-            self._info("Skipping telescope time update, because this board doesn't have a PPS")
-            return
-        now = time.time()
-        next_pps = int(now) + 1
-        self._info("Loading new telescope time at %s" % time.ctime(next_pps))
-        target_tt = int(next_pps * fs_hz)
-        delay = next_pps - time.time()
-        if delay < 0.2:
-            self._error("Took too long to generate software sync")
-        self.load_telescope_time(target_tt, software_load=False)
-        loaded_time = time.time()
-        spare = next_pps - loaded_time
-        if spare < 0.2:
-            self._warning("TT loaded with only %.2f seconds to spare" % spare)
-        if spare < 0:
-            self._error("TT loaded after the expected PPS arrival!")
-        # Now wait for a PPS so that the TT will have been loaded before anything else happend
-        if has_pps:
-            self.wait_for_pps()
+    #    """
+    #    fs_hz = fs_hz or self.clk_hz
+    #    if fs_hz is None:
+    #        self.logger.error('No FPGA clock rate was provided!')
+    #        raise
+    #    x = self.wait_for_pps()
+    #    has_pps = (x >= 0)
+    #    if not has_pps:
+    #        # Timed out, probably because this isn't the TT SNAP2 with PPS
+    #        self._info("Skipping telescope time update, because this board doesn't have a PPS")
+    #        return
+    #    now = time.time()
+    #    next_pps = int(now) + 1
+    #    self._info("Loading new telescope time at %s" % time.ctime(next_pps))
+    #    target_tt = int(next_pps * fs_hz)
+    #    delay = next_pps - time.time()
+    #    if delay < 0.2:
+    #        self._error("Took too long to generate software sync")
+    #    self.load_telescope_time(target_tt, software_load=False)
+    #    loaded_time = time.time()
+    #    spare = next_pps - loaded_time
+    #    if spare < 0.2:
+    #        self._warning("TT loaded with only %.2f seconds to spare" % spare)
+    #    if spare < 0:
+    #        self._error("TT loaded after the expected PPS arrival!")
+    #    # Now wait for a PPS so that the TT will have been loaded before anything else happend
+    #    if has_pps:
+    #        self.wait_for_pps()
 
-    def reset_telescope_time(self):
-        """
-        Reset the telescope time counter to 0 immediately.
-        """
-        self.change_reg_bits('ctrl', 0, self.OFFSET_RST_TT)
-        self.change_reg_bits('ctrl', 1, self.OFFSET_RST_TT)
-        self.change_reg_bits('ctrl', 0, self.OFFSET_RST_TT)
+    #def reset_telescope_time(self):
+    #    """
+    #    Reset the telescope time counter to 0 immediately.
+    #    """
+    #    self.change_reg_bits('ctrl', 0, self.OFFSET_RST_TT)
+    #    self.change_reg_bits('ctrl', 1, self.OFFSET_RST_TT)
+    #    self.change_reg_bits('ctrl', 0, self.OFFSET_RST_TT)
 
-    def load_telescope_time(self, tt, software_load=False):
-        """
-        Load a new starting value into the telescope time counter on the
-        next PPS.
+    #def load_telescope_time(self, tt, software_load=False):
+    #    """
+    #    Load a new starting value into the telescope time counter on the
+    #    next PPS.
 
-        :param tt: Telescope time to load
-        :type tt: int
+    #    :param tt: Telescope time to load
+    #    :type tt: int
 
-        :param software_load: If True, immediately load via a software trigger. Else
-            load on the next PPS arrival.
-        :type software_load: bool
-        """
-        assert tt < 2**64 - 1
-        self.write_int('tt_load_msb', tt >> 32)
-        self.write_int('tt_load_lsb', tt & 0xffffffff)
-        self.change_reg_bits('ctrl', 0, self.OFFSET_TT_LOAD_ARM)
-        self.change_reg_bits('ctrl', 1, self.OFFSET_TT_LOAD_ARM)
-        self.change_reg_bits('ctrl', 0, self.OFFSET_TT_LOAD_ARM)
-        if software_load:
-            self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_PPS)
-            self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_PPS)
-            self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_PPS)
+    #    :param software_load: If True, immediately load via a software trigger. Else
+    #        load on the next PPS arrival.
+    #    :type software_load: bool
+    #    """
+    #    assert tt < 2**64 - 1
+    #    self.write_int('tt_load_msb', tt >> 32)
+    #    self.write_int('tt_load_lsb', tt & 0xffffffff)
+    #    self.change_reg_bits('ctrl', 0, self.OFFSET_TT_LOAD_ARM)
+    #    self.change_reg_bits('ctrl', 1, self.OFFSET_TT_LOAD_ARM)
+    #    self.change_reg_bits('ctrl', 0, self.OFFSET_TT_LOAD_ARM)
+    #    if software_load:
+    #        self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_PPS)
+    #        self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_PPS)
+    #        self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_PPS)
 
     def load_internal_time(self, tt, software_load=False):
         """
@@ -256,40 +276,64 @@ class Sync(Block):
             raise RuntimeError
         return tt, sync_number
 
-    def update_internal_time(self, fs_hz=196e6):
+    def update_internal_time(self, fs_hz=None):
         """
         Arm sync trigger receivers,
         having loaded an appropriate telescope time.
 
-        :param fs_hz: The ADC clock rate, in Hz. Used to set the
-            telescope time counter.
+        :param fs_hz: The FPGA DSP clock rate, in Hz. Used to set the
+            telescope time counter. If None is provided, self.clk_hz will be used.
         :type fs_hz: int
 
         """
+
+        fs_hz = fs_hz or self.clk_hz
+        if fs_hz is None:
+            self.logger.error('No FPGA clock rate was provided!')
+            raise
+
         # Figure out sync rate
         tt0, sync0 = self.get_tt_of_sync()
         tt1, sync1 = self.get_tt_of_sync()
         sync_period = (tt1 - tt0) / (sync1 - sync0)
         self._info("Detected sync period %.1f (2^%.1f) clocks" % (sync_period, log2(sync_period)))
         sync_period = int(sync_period)
-        if sync_period < 1:
-            self.warning("Might have issues synchronizing with a sync period < 1 second")
+        sync_period_s = sync_period / fs_hz
+        sync_period_ms = 1000*sync_period_s
+        sync_period_us = 1000000*sync_period_s
+        self._info("Detected sync period is %.3f milliseconds" % (sync_period_ms))
+        # Check the offset of a sync from NTP time
+        self.wait_for_sync()
+        ntp_us = 1000000*time.time()
+        ntp_offset_us = int(ntp_us) % 1000000 # offset from NTP 1s boundary in microsec
+        ntp_offset_f = (ntp_offset_us / sync_period_us) % 1 # fraction of a period offset
+        # Wrap fractional offsets
+        if ntp_offset_f > 0.5:
+            ntp_offset_f -= 1
+        self._info("Last sync pulse arrived at time %.5f" % (ntp_us / 1e6))
+        self._info("Sync pulses offset from NTP by %d us" % (ntp_offset_f * sync_period_us))
+        if abs(ntp_offset_f) > 0.1:
+            self._warning("Sync pulses offset from NTP by %.2f of a period" % ntp_offset_f)
+        
         # We assume that the master TT is tracking clocks since unix epoch.
         # Syncs should come every `sync_period` ADC clocks
         self.wait_for_sync()
         now = time.time()
         now_clocks = int(now * fs_hz)
-        next_sync_clocks = ((now_clocks // sync_period) + 1) * sync_period
+        next_sync_clocks = (int(round((now_clocks / sync_period))) + 1) * sync_period
         next_sync = next_sync_clocks / fs_hz
-        self._info("Loading new telescope time at %s" % time.ctime(next_sync))
         delay = next_sync - time.time()
-        if delay < 0.2:
+        if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
             self._error("Took too long to configure telescope time register")
         self.load_internal_time(next_sync_clocks, software_load=False)
         loaded_time = time.time()
+        self._info("Loaded new telescope time for %s (%.4f)" % (time.ctime(next_sync), next_sync))
+        self._info("Load completed at %.4f" % loaded_time)
         spare = next_sync - loaded_time
-        if spare < 0.2:
-            self._warning("Internal TT loaded with only %.2f seconds to spare" % spare)
+        if spare < sync_period_s / 4: # Must have loaded at least 1/4 period before sync
+            self._warning("Internal TT loaded with only %.2f milliseconds to spare" % (1000*spare))
+        else:
+            self._info("Internal TT loaded with %.2f milliseconds to spare" % (1000*spare))
         if spare < 0:
             self._error("Internal TT loaded after the expected sync arrival!")
         # Wait for a sync to pass so the TT is laoded before anything else happens
@@ -324,7 +368,7 @@ class Sync(Block):
         stats['uptime_fpga_clks'] = self.uptime()
         stats['period_fpga_clks'] = self.period()
         stats['ext_count'] = self.count_ext()
-        stats['int_count'] = self.count_int()
+        #stats['int_count'] = self.count_int()
         return stats, flags
 
     def initialize(self, read_only=False):
@@ -341,5 +385,5 @@ class Sync(Block):
         else:
             self.write_int('ctrl', 0)
             # Set output pulse rate to 1 per 2**29 clocks (every ~2.7 seconds)
-            self.set_output_sync_rate(0xe0000000)
+            #self.set_output_sync_rate(0xe0000000)
             self.reset_error_count()
