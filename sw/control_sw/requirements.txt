@@ -2,6 +2,7 @@ setuptools
 pdoc3
 numpy
 matplotlib
+pyyaml
 #python3-tk
 termcolor
 progressbar
