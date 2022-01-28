@@ -3,11 +3,11 @@ fengines:
     pcie0:
         0:
             inputs: [0, 2]
-            gbe: '100.100.101.20'
+            gbes: ['100.100.102.20']
             source_port: 10000
         1:
             inputs: [2, 4]
-            gbe: '100.100.101.21'
+            gbes: ['100.100.102.21']
             source_port: 10000
 
 xengines:

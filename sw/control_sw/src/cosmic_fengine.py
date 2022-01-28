@@ -11,6 +11,7 @@ from . import __version__
 from .error_levels import *
 from .blocks import block
 from .blocks import fpga
+from .blocks import sync
 from .blocks import qsfp
 from .blocks import dts
 from .blocks import pfb
@@ -25,6 +26,7 @@ FENG_UDP_SOURCE_PORT = 10000
 MAC_BASE = 0x020203030400
 IP_BASE = (100 << 24) + (100 << 16) + (101 << 8) + 10
 NCHANS = 512
+NIFS = 2
 
 class CosmicFengine():
     """
@@ -33,13 +35,24 @@ class CosmicFengine():
     :param host: CasperFpga interface for host.
     :type host: casperfpga.CasperFpga
 
+    :param fpgfile: .fpg file for firmware to program (or already loaded)
+    :type fpgfile: str
+
+    :param pipeline_id: Zero-indexed ID of the pipeline on this host.
+    :type pipeline_id: int
+
+    :param neths: Number of 100GbE interfaces for this pipeline.
+    :type neths: int
+
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
 
     """
-    def __init__(self, host, fpgfile, pipeline_id=0, logger=None):
+    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pipeline_id = pipeline_id
+        self.fpgfile = fpgfile
+        self.neths = neths
         #: Python Logger instance
         self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(__name__ + ":%s" % (host)))
         #: Underlying CasperFpga control instance
@@ -74,6 +87,9 @@ class CosmicFengine():
         #: Control interface to high-level FPGA functionality
         self.fpga        = fpga.Fpga(self._cfpga, "")
 
+        #: Control interface to timing sync block
+        self.sync        = sync.Sync(self._cfpga, 'pipeline%d_sync' % self.pipeline_id)
+
         #: QSFP ports
         self.qsfp_a      = qsfp.Qsfp(self._cfpga, 'qsfpa')
         self.qsfp_b      = qsfp.Qsfp(self._cfpga, 'qsfpb')
@@ -90,8 +106,11 @@ class CosmicFengine():
                 n_chans=NCHANS, n_signals=4, n_parallel_streams=1,
                 n_cores=4, use_mux=False)
 
-        #: Control interface to 100GbE interface block
-        self.eth         = eth.Eth(self._cfpga, 'pipeline%d_eth0' % self.pipeline_id)
+        #: Control interface to 100GbE interface blocks
+        self.eths = []
+        for i in range(self.neths):
+            self.eths += [eth.Eth(self._cfpga, 'pipeline%d_eth%d' % (self.pipeline_id, i))]
+
 
         #: Control interface to Equalization block
         self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id,
@@ -116,6 +135,7 @@ class CosmicFengine():
         self.blocks = {
             'dts'         : self.dts,
             'fpga'        : self.fpga,
+            'sync'        : self.sync,
             'qsfp_a'      : self.qsfp_a,
             'qsfp_b'      : self.qsfp_b,
             'qsfp_c'      : self.qsfp_c,
@@ -125,7 +145,7 @@ class CosmicFengine():
             'autocorr'    : self.autocorr,
             'eq'          : self.eq,
             'eqtvg'       : self.eqtvg,
-            'eth'         : self.eth,
+            'eths'        : self.eths,
         }
 
     def initialize(self, read_only=True):
@@ -137,12 +157,17 @@ class CosmicFengine():
             in a read_only manner, and skip software reset.
         :type read_only: bool
         """
-        for blockname, block in self.blocks.items():
+        for blockname, b in self.blocks.items():
             if read_only:
                 self.logger.info("Initializing block (read only): %s" % blockname)
             else:
                 self.logger.info("Initializing block (writable): %s" % blockname)
-            block.initialize(read_only=read_only)
+            if isinstance(b, block.Block):
+                b.initialize(read_only=read_only)
+            elif isinstance(b, list):
+                for bi in b:
+                    if isinstance(bi, block.Block):
+                        bi.initialize(read_only=read_only)
         if not read_only:
             self.logger.info("Performing software global reset")
             #self.sync.arm_sync()
@@ -242,16 +267,20 @@ class CosmicFengine():
                 new_eq[stop_chan:] = 0
                 self.eq.set_coeffs(stream_id, new_eq[::coeff_repeat_factor])
 
-    def program(self, fpgfile):
+    def program(self, fpgfile=None):
         """
         Program an .fpg file to an F-engine FPGA.
 
         :param fpgfile: The .fpg file to be loaded. Should be a path to a
-            valid .fpg file. If None is given, the image currently in flash
-            will be loaded.
+            valid .fpg file. If None is given, the .fpg path provided
+            at FEngine instantiation-time will be loaded.
         :type fpgfile: str
 
         """
+        if fpgfile is None:
+            fpgfile = self.fpgfile
+        else:
+            self.fpgfile = fpgfile
 
         if fpgfile and not isinstance(fpgfile, str):
             raise TypeError("wrong type for fpgfile")
@@ -271,125 +300,11 @@ class CosmicFengine():
             self.logger.exception("Exception when reinitializing firmware blocks")
             raise RuntimeError("Error reinitializing blocks")
 
-    def configure_output(self, input_ids, n_chans_per_packet, n_chans_per_xeng, chans, ips, ports=None, debug=False):
-        """
-        Configure channel reordering and packetizer modules to emit a selection
-        of frequency channels.
-
-
-        :param n_chans_per_packet: Number of channels per packet.
-        :type n_chans_per_packet: int
-
-        :param n_chans_per_xeng: Number of channels per xeng.
-        :type n_chans_per_xeng: int
-
-        :param chans: A list of channel indices to be sent, e.g. ``range(0,1024)``.
-            The number of channels in this list should be an integer multiple
-            of ``n_chans_per_packet``. An assertion error is raised if this
-            is not the case.
-        :type chans: list of int
-
-        :param ips: A list of IP addresses to which packets should be sent. The
-            order of values in ``ips`` and ``chans`` should reflect where different
-            channels should be sent. The ``n`` th IP address in ``ips`` is the
-            destination to which channels
-            ``chans[n*n_chans_per_packet : (n+1)*n_chans_per_packet]`` should
-            be sent. As such, ``ips`` should have ``len(chans) // n_chans_per_packet``
-            elements. IP addresses should be provided in dotted-quad string
-            representation.
-        :type ips: list of str
-
-        :param ports: The UDP destination ports to which packets should be
-            transmitted. Addressing rules are the same as for ``ips``. If
-            None, all packets are transmitted to UDP port 10000.
-        :type ports: list of int
-
-        :param input_ids: A list of Antenna IDs which should be written to output packet
-            headers. Addressing rules are the same as for ``ips``.
-        :type input_ids: list
-
-        :param debug: Set to True to print extra diagnostic information.
-        :type debug: bool
-
-        :param n_boards: Transmit packets with headers indicating they came from
-            this many different boards. For example, if n_boards=2, the board
-            will transmit two streams of packets with antenna IDs ``base_ant``
-            and ``base_ant+64``
-        """
-        chans = np.array(chans)
-        assert chans.shape[0] % n_chans_per_packet == 0, \
-            "Number of chans to send must be an integer number of packets"
-        n_packets = chans.shape[0] // n_chans_per_packet
-
-        assert n_chans_per_packet % self.reorder.n_parallel_chans == 0, \
-            "Number of channels per packet must be an integer multiple of %d" % self.reorder.n_parallel_chans
-
-        packet_starts, packet_payloads, channel_indices = \
-            self.packetizer.get_packet_info(n_chans_per_packet, chan_block_size=self.reorder.n_parallel_chans)
-
-        self.logger.debug("Packet starts: %s" % packet_starts)
-        self.logger.debug("Packet payloads: %s" % packet_payloads)
-        self.logger.debug("Channel indices: %s" % channel_indices)
-
-        packet_starts = packet_starts[0:n_packets]
-        packet_payloads = packet_payloads[0:n_packets]
-        channel_indices = channel_indices[0:n_packets]
-        self.logger.debug("Reduced Packet starts: %s" % packet_starts)
-        self.logger.debug("Reduced Packet payloads: %s" % packet_payloads)
-        self.logger.debug("Reduced Channel indices: %s" % channel_indices)
-        ports = ports or [10000]*n_packets
-        assert n_packets == len(packet_starts)
-        assert len(ips) == n_packets
-        assert len(ports) == n_packets
-        assert len(input_ids) == n_packets
-
-        # channel_indices above gives the channel IDs which will
-        # be sent. Remap the ones we _want_ into these slots
-        i = 0
-        # initialize map to all -1
-        output_order = [-1 for _ in range(self.reorder.n_chans)]
-        for chan_range in channel_indices:
-            for chan in chan_range:
-                output_order[chan] = chans[i]
-                i += 1
-        # Fill gaps in the map with unused channels. All channels _must_
-        # be used somewhere, since the underlying reorder is not double
-        # buffered.
-        # 1. Make a list of unused channels
-        possible_channels = list(range(self.reorder.n_chans))
-        for i, chan in enumerate(output_order):
-            if chan == -1:
-                continue
-            if chan not in possible_channels:
-                self.logger.critical("Failed to remove channel %d from order map! Your data _will_ be nonsense" % chan)
-            else:
-                possible_channels.remove(chan)
-        # 2. Insert the unused channels in the map
-        for i, chan in enumerate(output_order):
-            if chan == -1:
-                output_order[i] = possible_channels.pop(0)
-
-        self.reorder.set_channel_order(output_order)
-            
-        self.packetizer.write_config(
-            packet_starts,
-            packet_payloads,
-            chans[::n_chans_per_packet],
-            input_ids,
-            ips,
-            ports,
-            n_chans_per_packet,
-            n_chans_per_xeng,
-            self.n_signals_per_board,
-            self.n_signals_per_xeng,
-            print_config=debug,
-        )
-
     def cold_start_from_config(self, config_file,
                     program=True, initialize=True, test_vectors=False,
                     sync=True, sw_sync=False, enable_eth=True):
         """
-        Completely configure a SNAP2 F-engine from scratch, using a configuration
+        Completely configure an F-engine from scratch, using a configuration
         YAML file.
 
         :param program: If True, start by programming the SNAP2 FPGA from
@@ -399,9 +314,7 @@ class CosmicFengine():
 
         :param initialize: If True, put all firmware blocks in their default
             initial state. Initialization is always performed if the FPGA
-            has been reprogrammed, but can be run without reprogramming
-            to (quickly) reset the firmware to a known state. Initialization
-            does not include ADC->FPGA link training.
+            has been reprogrammed.
         :type initialize: bool
 
         :param test_vectors: If True, put the F-engine in "frequency ramp" test mode.
@@ -421,6 +334,7 @@ class CosmicFengine():
         :type config_file: str
 
         """
+        import yaml
         self.logger.info("Trying to configure output with config file %s" % config_file)
         if not os.path.exists(config_file):
             self.logger.error("Output configuration file %s doesn't exist!" % config_file)
@@ -438,13 +352,15 @@ class CosmicFengine():
             localboard = conf['fengines'].get(self.hostname, None)
             if localboard is None:
                 self.logger.exception("No configuration for F-engine host %s" % self.hostname)
+                raise
             localconf = localboard.get(self.pipeline_id, None)
             if localconf is None:
                 self.logger.exception("No configuration for pipeline %d found" % self.pipeline_id)
+                raise
             first_input_index = localconf['inputs'][0]
             ninput = localconf['inputs'][1] - first_input_index
             macs = conf['xengines']['arp']
-            source_ip = localconf['gbe']
+            source_ips = localconf['gbes']
             source_port = localconf['source_port']
 
             dests = []
@@ -469,7 +385,7 @@ class CosmicFengine():
             first_input_index = first_input_index,
             ninput = ninput,
             macs = macs,
-            source_ip = source_ip,
+            source_ips = source_ips,
             source_port = source_port,
             dests = dests,
             )
@@ -477,8 +393,8 @@ class CosmicFengine():
 
     def cold_start(self, program=True, initialize=True, test_vectors=False,
                    sync=True, sw_sync=False, enable_eth=True,
-                   chans_per_packet=96, first_input_index=0, ninput=32,
-                   macs={}, source_ip='10.41.0.101', source_port=10000,
+                   chans_per_packet=32, first_input_index=0, ninput=NIFS,
+                   macs={}, source_ips=['10.41.0.101'], source_port=10000,
                    dests=[]):
         """
         Completely configure an F-engine from scratch.
@@ -517,20 +433,17 @@ class CosmicFengine():
         :type first_input_index: int
 
         :param ninput: Number of inputs to be sent. Values of ``n*32`` may be used
-            to spood F-engine packets from multiple SNAP2 boards.
+            to spoof F-engine packets from multiple SNAP2 boards.
         :type ninput: int
-
-        :param start_chan: First frequency channel to send to X-engines. Should be
-            an integer multiple of 16.
-        :type start_chan: int
 
         :param macs: Dictionary, keyed by dotted-quad string IP addresses, containing
             MAC addresses for F-engine packet destinations. I.e., IP/MAC pairs for all
             X-engines.
         :type macs: dict
 
-        :param source_ip: The IP address from which this board should send packets.
-        :type source_ip: str
+        :param source_ips: The IP addresses from which this board should send packets.
+            A list with one IP entry per interface.
+        :type source_ips: list of str
 
         :param source_port: The source UDP port from which F-engine packets should be sent.
         :type source_port: int
@@ -550,19 +463,10 @@ class CosmicFengine():
         """
         if program:
             self.program()
-            try:
-                self.adc.initialize(read_only=False)
-            except RuntimeError:
-                # Try once more. TODO: just make work(!)
-                self.adc.initialize(read_only=False)
         
         if program or initialize:
-            for blockname, block in self.blocks.items():
-                if blockname == 'adc':
-                    continue
-                block.initialize(read_only=False)
-            self.logger.warning('Updating telescope time')
-            self.sync.update_telescope_time()
+            self.initialize(read_only=False)
+            self.logger.info('Updating telescope time')
             self.sync.update_internal_time()
 
         if test_vectors:
@@ -575,75 +479,86 @@ class CosmicFengine():
 
         if sync:
             self.logger.info("Arming sync generators")
-            self.eth.disable_tx()
+            for eth in self.eths:
+                eth.disable_tx()
             self.sync.arm_sync()
             self.sync.arm_noise()
             if sw_sync:
                 self.logger.info("Issuing software sync")
                 self.sync.sw_sync()
 
-        mac = MAC_BASE + int(source_ip.split('.')[-1])
-        self.eth.configure_source(mac, source_ip, source_port)
+        for sn, source_ip in enumerate(source_ips):
+            if sn >= self.neths:
+                self.logger.warning('Skipping setting Ethernet interface %d of %d' % (sn, self.neths))
+                continue
+            mac = MAC_BASE + int(source_ip.split('.')[-1])
+            self.eths[sn].configure_source(mac, source_ip, source_port)
 
         # Configure ARP cache
-        for ip, mac in macs.items():
-            self.eth.add_arp_entry(ip, mac)
+        for eth in self.eths:
+            for ip, mac in macs.items():
+                eth.add_arp_entry(ip, mac)
 
         # Configure packetizer
-        ninput_per_board = self.n_signals_per_board // 2
-        assert first_input_index % ninput_per_board == 0, \
-            "first_ant_index should be a multiple of %d" % ninput_per_board
-        assert ninput % ninput_per_board == 0, \
-            "ninput should be a multiple of %d" % ninput_per_board
-        localants = range(first_input_index, first_input_index + ninput)
-        chans_to_send = []
-        ips = []
-        ports = []
-        signal_ids = []
-        this_x_packets = None
+        # Packets are ordered as chan x input x (1 packet of `chan_per_packet` chans)
+        pkt_starts, pkt_payloads, chan_indices, sig_indices = self.packetizer.get_packet_info(chans_per_packet)
+        n_pkts = len(pkt_starts)
+
+        if n_pkts * chans_per_packet != NCHANS * ninput:
+            self.logger.error('Something is wrong with the number of channels being sent')
+            self.logger.error('npkts: %d' % n_pkts)
+            self.logger.error('chans_per_packet: %d' % chans_per_packet)
+            self.logger.error('Number of inputs: %d' % ninput)
+            self.logger.error('total channels: %d' % NCHANS)
+            raise RuntimeError
+
+        if ninput != NIFS:
+            self.logger.error('Number of inputs (%d) doesn\'t match number of IFs (%d)' % (ninput, NIFS))
+            raise RuntimeError
+
+        ips = ['0.0.0.0' for _ in range(n_pkts)]
+        ports = [0 for _ in range(n_pkts)]
         ok = True
         for dest in dests:
             try:
-                for ant in localants[::(self.n_signals_per_board // 2)]:
-                    dest_ip = dest['ip']
-                    dest_port = dest['port']
-                    if dest_ip not in macs:
-                        self.logger.critical("MAC address for IP %s is not known" % dest_ip)
-                    start_chan = dest['start_chan']
-                    nchan = dest['nchan']
-                    this_x_chans = range(start_chan, start_chan + nchan)
-                    if this_x_packets is None:
-                        this_x_packets = len(this_x_chans) // chans_per_packet
-                    else:
-                        if this_x_packets != len(this_x_chans) // chans_per_packet:
-                            self.logger.error("Can't have different total numbers of channels per X-engine")
-                            ok = False
-                    signal_ids += [2*ant] * this_x_packets
-                    ips += [dest_ip] * this_x_packets
-                    ports += [dest_port] * this_x_packets
-                    chans_to_send += list(this_x_chans)
+                start_chan = dest['start_chan']
+                nchan = dest['nchan']
+                dest_ip = dest['ip']
+                dest_port = dest['port']
+                assert nchan % chans_per_packet == 0, "Can't send %d chans with %d-chan packets" % (nchan, chans_per_packet)
+                chans = range(start_chan, start_chan + nchan)
+                for chan in chans[::chans_per_packet]:
+                    for ifn in range(ninput):
+                        pkt_num = (chan // chans_per_packet)*ninput + ifn
+                        ips[pkt_num] = dest_ip
+                        ports[pkt_num] = dest_port
+                        if dest_ip not in macs:
+                            self.logger.critical("MAC address for IP %s is not known" % dest_ip)
             except:
                 self.logger.exception("Failed to parse destination %s" % dest)
                 ok = False
                 raise
 
         if ok:
-            self.configure_output(
-                    signal_ids,
-                    chans_per_packet,
-                    chans_per_packet*this_x_packets,
-                    chans_to_send,
+            self.packetizer.write_config(
+                    pkt_starts,
+                    pkt_payloads,
+                    chan_indices,
+                    sig_indices,
                     ips,
-                    ports
+                    ports,
+                    [chans_per_packet]*n_pkts,
                     )
         else:
             self.logger.error("Not configuring Ethernet output because configuration builder failed")
 
         if enable_eth:
             self.logger.info("Enabling Ethernet output")
-            self.eth.enable_tx()
+            for eth in self.eths:
+                eth.enable_tx()
         else:
             self.logger.info("Disabling Ethernet output")
-            self.eth.disable_tx()
+            for eth in self.eths:
+                eth.disable_tx()
 
         self.logger.info("Startup of %s complete" % self.hostname)
