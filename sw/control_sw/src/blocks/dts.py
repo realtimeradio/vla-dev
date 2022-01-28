@@ -304,7 +304,7 @@ class Dts(Block):
         for dn, d in enumerate(x[0:64]):
            print("%.4d" % dn, np.binary_repr(d & locked, width=12))
 
-    def align_lanes(self, mux_factor=4):
+    def align_lanes(self, mux_factor=4, retries=1):
         locked = self.get_lock_state()
         if locked == 0:
             self._error("Can't align because no lanes are locked!")
@@ -336,8 +336,12 @@ class Dts(Block):
             # first nosync after the first sync.
             # This gives some room to ignore snapshot edge effects
             first_sync = sync_ref.index(1)
+            self._debug("Reference: first sync at %d" % first_sync)
             first_nosync = sync_ref[first_sync+1 :].index(0) + first_sync + 1
+            self._debug("Reference: first post-sync at %d" % first_nosync)
             ref_point = sync_ref[first_nosync+1 :].index(1) + first_nosync + 1
+            self._debug("Reference: Second (reference) sync at %d" % ref_point)
+            self._debug("+/-8 around reference: %s" % (str(lanes_sync[ref_point-8:ref_point+8])))
         except ValueError:
             self._error("Failed to find reference sync point")
             raise
@@ -367,7 +371,11 @@ class Dts(Block):
                     self.delay_stream(lane)
         synced = self.is_synced()
         if not synced:
-            self._critical("Automatic lane syncing failed!")
+            if retries == 0:
+                self._critical("Automatic lane syncing failed!")
+            elif retries > 0:
+                self._warning("Retrying DTS alignment")
+                return self.align_lanes(mux_factor=mux_factor, retries=retries-1)
         return synced
 
     def is_synced(self):
