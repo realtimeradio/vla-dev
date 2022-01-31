@@ -5,7 +5,7 @@ import numpy as np
 from .block import Block
 from cosmic_f.error_levels import *
 
-LANE_MAP = [0, 4, 5, 1, 2, 3, 6, 7, 8, 9, 10, 11]
+LANE_MAP = [0, 1, 4, 11, 2, 3, 5, 6, 7, 8, 9, 10]
 _LOCK_TIMEOUT_SECS = 1
 
 class Dts(Block):
