@@ -106,7 +106,7 @@ class CosmicFengine():
         #: Control interface for the Autocorrelation block
         self.autocorr = autocorr.AutoCorr(self._cfpga,
                 'pipeline%d_autocorr' % self.pipeline_id,
-                n_chans=NCHANS, n_signals=4, n_parallel_streams=1,
+                n_chans=NCHANS, n_signals=4, n_parallel_streams=4,
                 n_cores=4, use_mux=False)
 
         #: Control interface to 100GbE interface blocks
