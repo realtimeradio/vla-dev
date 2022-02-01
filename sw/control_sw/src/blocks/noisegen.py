@@ -25,14 +25,18 @@ class NoiseGen(Block):
         streams will be produced.
     :type n_noise: int
 
+    :param n_parallel_samples: Number of parallel samples per noise stream.
+    :type n_parallel_samples: int
+
     :param n_outputs: The number of output channels from the block.
     :type n_outputs: int
 
     """
-    def __init__(self, host, name, n_noise=5, n_outputs=64, logger=None):
+    def __init__(self, host, name, n_noise=5, n_outputs=64, n_parallel_samples=8, logger=None):
         super(NoiseGen, self).__init__(host, name, logger)
         self.n_noise = n_noise
         self.n_outputs = n_outputs
+        self.n_parallel_samples = n_parallel_samples
 
     def set_seed(self, n, seed):
         """
@@ -50,8 +54,9 @@ class NoiseGen(Block):
         if seed > 255:
             self._error('Seed value is an 8-bit integer. It cannot be %d' % seed)
             return
-        regname = 'seeds%d' % (n // 4)
-        self.change_reg_bits(regname, seed, 8 * (n % 4), 8)
+        for i in range(self.n_parallel_samples//2):
+            regname = 'seeds%d' % ((n*self.n_parallel_samples//2+i) // 4)
+            self.change_reg_bits(regname, seed+i, 8 * ((n*self.n_parallel_samples//2+i) % 4), 8)
 
     def get_seed(self, n):
         """
@@ -66,8 +71,8 @@ class NoiseGen(Block):
         if n > self.n_noise:
             self._error('Tried to get noise generator seed for n %d > n_noise (%d)' % (n, self.n_noise))
             return
-        regname = 'seeds%d' % (n // 4)
-        return self.get_reg_bits(regname, 8 * (n % 4), 8)
+        regname = 'seeds%d' % ((n*self.n_parallel_samples//2) // 4)
+        return self.get_reg_bits(regname, 8 * ((n*self.n_parallel_samples//2) % 4), 8)
 
     def assign_output(self, output, noise):
         """
@@ -84,7 +89,7 @@ class NoiseGen(Block):
             range(0, 2*self.n_noise)
         :type noise: int
         """
-        assert (noise < 2*self.n_noise), "Tried to assign noise source >= 2*self.n_noise"
+        assert (noise < self.n_noise), "Tried to assign noise source >= self.n_noise"
         assert (output < self.n_outputs), "Tried to assign an output >= self.n_outputs"
         # Control is in blocks of 8. Which block do we need?
         octal_block = output // 8

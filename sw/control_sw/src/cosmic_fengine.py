@@ -13,6 +13,7 @@ from .blocks import block
 from .blocks import fpga
 from .blocks import sync
 from .blocks import input
+from .blocks import noisegen
 from .blocks import qsfp
 from .blocks import dts
 from .blocks import pfb
@@ -119,6 +120,10 @@ class CosmicFengine():
         self.input = input.Input(self._cfpga, 'pipeline%d_input' % self.pipeline_id,
                 n_inputs=4, n_bits=12, n_parallel_samples=8)
 
+        #: Control interface to noise generation block
+        self.noisegen = noisegen.NoiseGen(self._cfpga, 'pipeline%d_input' % self.pipeline_id,
+                n_noise=2, n_outputs=4, n_parallel_samples=8)
+
         #: Control interface to Equalization block
         self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id,
                 n_streams=4, n_coeffs=2**7)
@@ -143,6 +148,7 @@ class CosmicFengine():
             'dts'         : self.dts,
             'fpga'        : self.fpga,
             'sync'        : self.sync,
+            #'noisegen'    : self.noisegen,
             'input'       : self.input,
             'qsfp_a'      : self.qsfp_a,
             'qsfp_b'      : self.qsfp_b,
