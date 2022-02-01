@@ -12,6 +12,7 @@ from .error_levels import *
 from .blocks import block
 from .blocks import fpga
 from .blocks import sync
+from .blocks import input
 from .blocks import qsfp
 from .blocks import dts
 from .blocks import pfb
@@ -114,6 +115,9 @@ class CosmicFengine():
         for i in range(self.neths):
             self.eths += [eth.Eth(self._cfpga, 'pipeline%d_eth%d' % (self.pipeline_id, i))]
 
+        #: Control interface to Input multiplexor / statistics
+        self.input = input.Input(self._cfpga, 'pipeline%d_input' % self.pipeline_id,
+                n_inputs=4, n_bits=12, n_parallel_samples=8)
 
         #: Control interface to Equalization block
         self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id,
@@ -139,6 +143,7 @@ class CosmicFengine():
             'dts'         : self.dts,
             'fpga'        : self.fpga,
             'sync'        : self.sync,
+            'input'       : self.input,
             'qsfp_a'      : self.qsfp_a,
             'qsfp_b'      : self.qsfp_b,
             'qsfp_c'      : self.qsfp_c,

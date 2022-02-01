@@ -2,13 +2,13 @@ import struct
 import time
 import numpy as np
 from .block import Block
-from lwa_f.error_levels import *
+from cosmic_f.error_levels import *
 
 class Input(Block):
     """
     Instantiate a control interface for an Input block. This block
-    allows switching data streams between constant-zeros, digital noise,
-    and ADC streams.
+    allows switching data inputs between constant-zeros, digital noise,
+    and ADC inputs.
 
     A statistics interface is also provided, providing bit statistics and
     histograms.
@@ -22,13 +22,16 @@ class Input(Block):
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
 
-    :param n_streams: Number of independent streams which may be delayed
-    :type n_streams: int
+    :param n_inputs: Number of independent inputs.
+    :type n_inputs: int
+
+    :param n_parallel_samples: Number of parallel samples per input stream.
+    :type n_parallel_samples: int
 
     :param n_bits: Number of bits per ADC sample.
     :type n_bits: int
 
-    :ivar n_streams: Number of streams this interface handles
+    :ivar n_inputs: Number of inputs this interface handles
     :ivar n_bits: Number of bits per ADC sample
     """
     _USE_NOISE = 0
@@ -38,12 +41,12 @@ class Input(Block):
     _INT_TO_POS[_USE_NOISE] = 'noise'
     _INT_TO_POS[_USE_ADC]   = 'adc'
     _INT_TO_POS[_USE_ZERO]  = 'zero'
-    _SNAPSHOT_SAMPLES_PER_POL = 2048
 
-    def __init__(self, host, name, n_streams=64, n_bits=10, logger=None):
+    def __init__(self, host, name, n_inputs=4, n_bits=12, n_parallel_samples=8, logger=None):
         super(Input, self).__init__(host, name, logger)
-        self.n_streams = n_streams
+        self.n_inputs = n_inputs
         self.n_bits = n_bits
+        self.n_parallel_samples = n_parallel_samples
 
     def get_switch_positions(self):
         """
@@ -52,90 +55,97 @@ class Input(Block):
         :return: List of switch positions. Entry ``n`` contains the position
             of the switch associated with ADC input ``n``. Switch positions
             are "noise" (internal digital noise generators), "adc"
-            (digitized ADC stream), or "zero" (constant 0).
+            (digitized ADC input), or "zero" (constant 0).
         :rtype: list of str
 
         """
         pos = []
-        for regn in range(self.n_streams // 16):
+        for regn in range(max(1, self.n_inputs // 16)):
             reg_val = self.read_uint('source_sel%d' % regn)
-            for i in range(16):
+            for i in range(min(self.n_inputs, 16)):
                 # MSBs of control signals are for first input
-                v = (reg_val >> (2*(15-i))) & 0b11
+                v = (reg_val >> (2*(min(self.n_inputs-1, 15)-i))) & 0b11
                 pos += [self._INT_TO_POS[v]]
         return pos
                 
 
-    def _switch(self, val, stream=None):
+    def _switch(self, val, input=None):
         """
-        Set the switch position of a single input stream.
+        Set the switch position of a single input input.
         
         :param val: mux select value desired.
         :type val: int
 
-        :param stream: Which stream to switch. If None, switch all.
-        :type stream: int or None
+        :param input: Which input to switch. If None, switch all.
+        :type input: int or None
 
         """
         assert (val < 4), "Mux input value not recognized!"
-        if stream is not None:
-            assert (stream < self.n_streams), "Can't switch stream >= self.n_streams" 
-            reg = 'source_sel%d' % (stream // 16) # one register per 16 streams
-            reg_pos = 15 - (stream % 16) # First input controlled by MSBs
+        if input is not None:
+            assert (input < self.n_inputs), "Can't switch input >= self.n_inputs" 
+            reg = 'source_sel%d' % (input // 16) # one register per 16 inputs
+            reg_pos = min(self.n_inputs-1, 15) - (input % 16) # First input controlled by MSBs
             self.change_reg_bits(reg, val, 2*reg_pos, 2)
         else:
-            for stream in range(self.n_streams):
-                self._switch(val, stream)
+            for input in range(self.n_inputs):
+                self._switch(val, input)
 
-    def use_noise(self, stream=None):
+    def use_noise(self, input=None):
         """
         Switch input to internal noise source.
 
-        :param stream: Which stream to switch. If None, switch all.
-        :type stream: int or None
+        :param input: Which input to switch. If None, switch all.
+        :type input: int or None
 
         """
-        self._debug("Stream %s: switching to Noise" % stream)
-        self._switch(self._USE_NOISE, stream)
+        self._debug("Stream %s: switching to Noise" % input)
+        self._switch(self._USE_NOISE, input)
 
-    def use_adc(self, stream=None):
+    def use_adc(self, input=None):
         """
         Switch input to ADC.
 
-        :param stream: Which stream to switch. If None, switch all.
-        :type stream: int or None
+        :param input: Which input to switch. If None, switch all.
+        :type input: int or None
 
         """
-        self._debug("Stream %s: switching to ADC" % stream)
-        self._switch(self._USE_ADC, stream)
+        self._debug("Stream %s: switching to ADC" % input)
+        self._switch(self._USE_ADC, input)
 
-    def use_zero(self, stream=None):
+    def use_zero(self, input=None):
         """
         Switch input to zeros.
 
-        :param stream: Which stream to switch. If None, switch all.
-        :type stream: int or None
+        :param input: Which input to switch. If None, switch all.
+        :type input: int or None
 
         """
-        self._debug("Stream %s: switching to Zeros" % stream)
-        self._switch(self._USE_ZERO, stream)
+        self._debug("Stream %s: switching to Zeros" % input)
+        self._switch(self._USE_ZERO, input)
 
     def get_bit_stats(self):
         """
-        Get the mean, RMS, and mean powers of all ADC streams.
+        Get the mean, RMS, and mean powers of all ADC inputs.
 
         :return: (means, powers, rmss) tuple. Each member of the tuple is an
-            array with ``self.n_streams`` elements.
+            array with ``self.n_inputs`` elements.
         :rval: (numpy.ndarray, numpy.ndarray, numpy.ndarray)
 
         """
         self.write_int('rms_enable', 1)
         time.sleep(0.01)
         self.write_int('rms_enable', 0)
-        x = np.array(struct.unpack('>%dl' % (2*self.n_streams), self.read('rms_levels', self.n_streams * 8)))
+        x = np.array(struct.unpack('>%dq' % (self.n_inputs*self.n_parallel_samples), self.read('rms_levels', self.n_inputs * self.n_parallel_samples * 8)))
         self.write_int('rms_enable', 1)
-        means    = x[0::2] / 2.**16
-        powers   = x[1::2] / 2.**16
+        # Top 28 bits of data are signed means
+        # Lower 36 bits are unsigned powers
+        means    = (x >> 36).astype(np.int64)
+        means[means >= 2**27] -= 2**28
+        means    = means.astype(float) / 2.**16
+        powers   = (x & (2**36 - 1)) / 2.**16
+        # Combine stats across multiple parallel samples
+        means  =  means.reshape(self.n_inputs, self.n_parallel_samples).mean(axis=1)
+        powers = powers.reshape(self.n_inputs, self.n_parallel_samples).sum(axis=1)
         rmss     = np.sqrt(powers)
         return means, powers, rmss
 
@@ -161,17 +171,17 @@ class Input(Block):
         Status keys:
 
             - switch_position<n> (str) : Switch position ('noise', 'adc' or 'zero')
-              for input stream ``n``, where ``n`` is a two-digit integer starting at 00.
+              for input input ``n``, where ``n`` is a two-digit integer starting at 00.
               Any input position other than 'adc' is flagged with "NOTIFY".
 
-            - power<n> (float) : Mean power of input stream ``n``, where ``n`` is a
+            - power<n> (float) : Mean power of input input ``n``, where ``n`` is a
               two-digit integer starting at 00. In units of (ADC LSBs)**2.
 
-            - rms<n> (float) : RMS of input stream ``n``, where ``n`` is a
+            - rms<n> (float) : RMS of input input ``n``, where ``n`` is a
               two-digit integer starting at 00. In units of ADC LSBs. Value is
               flagged as a warning if it is >30 or <5.
 
-            - mean<n> (float) : Mean sample value of input stream ``n``, where ``n`` is a
+            - mean<n> (float) : Mean sample value of input input ``n``, where ``n`` is a
               two-digit integer starting at 00. In units of ADC LSBs. Value
               is flagged as a warning if it is > 2.
 
@@ -186,7 +196,7 @@ class Input(Block):
         flags = {}
         switch_positions = self.get_switch_positions()
         mean, power, rms = self.get_bit_stats()
-        for i in range(self.n_streams):
+        for i in range(self.n_inputs):
             stats['switch_position%.2d' % i] = switch_positions[i]
             if switch_positions[i] != 'adc':
                 flags['switch_position%.2d' % i] = FENG_NOTIFY
@@ -199,22 +209,22 @@ class Input(Block):
                 flags['mean%.2d' % i] = FENG_WARNING
         return stats, flags
 
-    def _set_histogram_input(self, stream):
+    def _set_histogram_input(self, input):
         """
         Set input of histogram block computation core.
 
-        :param stream: Stream number to select.
-        :type stream: int
+        :param input: Stream number to select.
+        :type input: int
         """
-        assert (stream < self.n_streams), "Can't switch stream >= self.n_streams" 
-        self.write_int('bit_stats_input_sel', stream)
+        assert (input < self.n_inputs), "Can't switch input >= self.n_inputs" 
+        self.write_int('bit_stats_input_sel', input*self._n_parallel_samples)
 
-    def get_histogram(self, stream, sum_cores=True):
+    def get_histogram(self, input, sum_cores=True):
         """
-        Get a histogram for an ADC stream.
+        Get a histogram for an ADC input.
         
-        :param stream: ADC stream from which to get data.
-        :type stream: int
+        :param input: ADC input from which to get data.
+        :type input: int
 
         :param sum_cores: If True, compute one histogram from both pairs of
             interleaved ADC cores associated with an analog input.
@@ -228,8 +238,8 @@ class Input(Block):
             are separate histogram data sets for the even-sample and odd-sample
             ADC cores, respectively.
         """
-        self._info("Getting histogram for stream %d" % stream)
-        self._set_histogram_input(stream)
+        self._info("Getting histogram for input %d" % input)
+        self._set_histogram_input(input)
         time.sleep(0.1)
         v = np.array(struct.unpack('>%dH' % (2*2**self.n_bits), self.read('bit_stats_histogram_output', 2*2*2**self.n_bits)))
         a = v[0:2**self.n_bits]
@@ -247,12 +257,12 @@ class Input(Block):
         Get histograms for all signals, summing over all interleaving cores.
 
         :return: (vals, hists). ``vals`` is a list of histogram bin centers.
-            ``hists`` is an ``[n_stream x 2**n_bits]`` list of histogram
+            ``hists`` is an ``[n_input x 2**n_bits]`` list of histogram
             data.
         """
-        out = np.zeros([self.n_streams, 2**self.n_bits])
-        for stream in range(self.n_streams):
-            x, out[stream,:] = self.get_histogram(stream, sum_cores=True)
+        out = np.zeros([self.n_inputs, 2**self.n_bits])
+        for input in range(self.n_inputs):
+            x, out[input,:] = self.get_histogram(input, sum_cores=True)
         return x, out.tolist()
 
     def print_histograms(self):
@@ -267,15 +277,15 @@ class Input(Block):
                 print('%.3f'%ant[vn], end=' ')
             print()
 
-    def plot_histogram(self, stream):
+    def plot_histogram(self, input):
         """
         Plot a histogram.
 
-        :param stream: ADC stream from which to get data.
-        :type stream: int
+        :param input: ADC input from which to get data.
+        :type input: int
         """
         
         from matplotlib import pyplot as plt
-        bins, d = self.get_histogram(stream)
+        bins, d = self.get_histogram(input)
         plt.bar(np.array(bins)-0.5, d, width=1)
         plt.show()
