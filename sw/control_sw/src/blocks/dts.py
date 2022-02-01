@@ -304,7 +304,7 @@ class Dts(Block):
         for dn, d in enumerate(x[0:64]):
            print("%.4d" % dn, np.binary_repr(d & locked, width=12))
 
-    def align_lanes(self, mux_factor=4, retries=1):
+    def align_lanes(self, mux_factor=4, retries=0):
         locked = self.get_lock_state()
         if locked == 0:
             self._error("Can't align because no lanes are locked!")
