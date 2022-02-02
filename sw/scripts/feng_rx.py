@@ -12,7 +12,7 @@ RXBUF = 8500
 
 def unpack(pkt):
     header = struct.unpack(">BBHHHQ", pkt[0:16])
-    d = np.frombuffer(pkt[16:], dtype=">B")
+    d = np.frombuffer(pkt[16:], dtype=">H")
     h = {}
     h['timestamp'] = header[5]
     h['feng_id'] = header[4]
