@@ -1,1 +1,3 @@
 *.xpr.zip filter=lfs diff=lfs merge=lfs -text
+pr_templates/adm_pcie_9h7_dts_dual_4x100g_pr_template.xpr.zip filter=lfs diff=lfs merge=lfs -text
+pr_templates/adm_pcie_9h7_dts_dual_4x100g_pr_template-no-ip.xpr.zip filter=lfs diff=lfs merge=lfs -text
