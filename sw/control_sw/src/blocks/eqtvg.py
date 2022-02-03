@@ -17,19 +17,23 @@ class EqTvg(Block):
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
 
-    :param n_streams: Number of independent streams which may be delayed
-    :type n_streams: int
+    :param n_inputs: Number of independent inputs which may be emulated
+    :type n_inputs: int
+
+    :param n_serial_inputs: Number of independent inputs sharing a data bus
+    :type n_serial_inputs: int
 
     :param n_chans: Number of frequency channels.
     :type n_chans: int
 
     """
-    _FORMAT = 'B'
-    def __init__(self, host, name, n_streams=64, n_chans=2**12, logger=None):
+    _FORMAT = 'H'
+    def __init__(self, host, name, n_inputs=64, n_chans=2**12, n_serial_inputs=16, logger=None):
         super(EqTvg, self).__init__(host, name, logger)
-        self.n_streams = n_streams
+        self.n_inputs = n_inputs
+        self.n_serial_inputs = n_serial_inputs
         self.n_chans = n_chans
-        self._stream_size = struct.calcsize(self._FORMAT)*self.n_chans
+        self._input_size = struct.calcsize(self._FORMAT)*self.n_chans
 
     def tvg_enable(self):
         """
@@ -53,12 +57,12 @@ class EqTvg(Block):
         """
         return bool(self.read_int('tvg_en'))
     
-    def write_stream_tvg(self, stream, test_vector):
+    def write_input_tvg(self, input, test_vector):
         """
-        Write a test vector pattern to a single signal stream.
+        Write a test vector pattern to a single signal input.
         
-        :param stream: Index of stream to which test vectors should be loaded.
-        :type stream: int
+        :param input: Index of input to which test vectors should be loaded.
+        :type input: int
 
         :param test_vector: `self.n_chans`-element test vector. Values should
             be representable in 8-bit unsigned integer format. Data are loaded
@@ -71,17 +75,17 @@ class EqTvg(Block):
         """
         tv = np.array(test_vector, dtype='>%s'%self._FORMAT)
         assert (tv.shape[0] == self.n_chans), "Test vector should have self.n_chans elements!"
-        core_name = 'core%d_tv' % (stream // 16)
-        sub_index = stream % 16
-        self.write(core_name, tv.tostring(), offset=sub_index*self._stream_size)
+        core_name = 'core%d_tv' % (input // self.n_serial_inputs)
+        sub_index = input % self.n_serial_inputs
+        self.write(core_name, tv.tostring(), offset=sub_index*self._input_size)
 
-    def write_const_per_stream(self):
+    def write_const_per_input(self):
         """
-        Write a constant to all the channels of a stream,
-        with stream `i` taking the value `i`.
+        Write a constant to all the channels of a input,
+        with input `i` taking the value `i`.
         """
-        for stream in range(self.n_streams):
-            self.write_stream_tvg(stream, np.ones(self.n_chans)*stream)
+        for input in range(self.n_inputs):
+            self.write_input_tvg(input, np.ones(self.n_chans)*input)
 
     def write_freq_ramp(self):
         """
@@ -90,16 +94,16 @@ class EqTvg(Block):
         8 bits. I.e., the test vector value for channel 257 takes the value ``1``.
         """
         ramp = np.arange(self.n_chans)
-        ramp = np.array(ramp, dtype='>%s' %self._FORMAT) # tvg values are only 8 bits
-        for stream in range(self.n_streams):
-            self.write_stream_tvg(stream, ramp)
+        ramp = np.array(ramp, dtype='>%s' %self._FORMAT)
+        for input in range(self.n_inputs):
+            self.write_input_tvg(input, ramp)
 
-    def read_stream_tvg(self, stream, makecomplex=False):
+    def read_input_tvg(self, input, makecomplex=False):
         """
-        Read the test vector loaded to an ADC stream.
+        Read the test vector loaded to an ADC input.
         
-        :param stream: Index of stream from which test vectors should be read.
-        :type stream: int
+        :param input: Index of input from which test vectors should be read.
+        :type input: int
 
         :param makecomplex: If True, return an array of 4+4 bit complex numbers,
            as interpretted by the correlator. If False, return the raw unsigned 8-bit
@@ -110,19 +114,19 @@ class EqTvg(Block):
         :rtype: numpy.ndarray
 
         """
-        core_name = 'core%d_tv' % (stream // 16)
-        sub_index = stream % 16
-        s = self.read(core_name, self._stream_size, offset=sub_index*self._stream_size)
-        tvg = np.fromstring(s, dtype='>%s' %self._FORMAT)
+        core_name = 'core%d_tv' % (input // self.n_serial_inputs)
+        sub_index = input % self.n_serial_inputs
+        s = self.read(core_name, self._input_size, offset=sub_index*self._input_size)
+        dtype = '>%s' % self._FORMAT
+        ri_width = struct.calcsize(self._FORMAT) * 8 // 2
+        tvg = np.fromstring(s, dtype=dtype)
 
         if makecomplex:
-            assert self._FORMAT == 'B', "Don't know how to make '%s' format values complex" % self._FORMAT
-            tvg_r = tvg.view(dtype=np.int8) >> 4
-            tvg_r[tvg_r > 7] -= 16
-            tvg_i = tvg.view(dtype=np.int8) & 0xf
-            tvg_i[tvg_i > 7] -= 16
+            tvg_r = tvg.view(dtype=dtype.lower()) // (2**ri_width)
+            tvg_r[tvg_r > (2**(ri_width-1))] -= (2**ri_width)
+            tvg_i = tvg.view(dtype=dtype.lower()) % (2**ri_width)
+            tvg_i[tvg_i > (2**(ri_width-1))] -= (2**ri_width)
             tvg = tvg_r + 1j*tvg_i
-
         return tvg
 
     def get_status(self):

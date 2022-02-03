@@ -325,7 +325,7 @@ class Sync(Block):
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
             self._error("Took too long to configure telescope time register")
-        self.load_internal_time(next_sync_clocks, software_load=False)
+        self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
         self._info("Loaded new telescope time for %s (%.4f)" % (time.ctime(next_sync), next_sync))
         self._info("Load completed at %.4f" % loaded_time)

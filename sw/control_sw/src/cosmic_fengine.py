@@ -130,7 +130,7 @@ class CosmicFengine():
 
         #: Control interface to post-equalization Test Vector Generator block
         self.eqtvg = eqtvg.EqTvg(self._cfpga, 'pipeline%d_post_eq_tvg' % self.pipeline_id,
-                n_streams=4, n_chans=NCHANS)
+                n_inputs=4, n_serial_inputs=1, n_chans=NCHANS)
 
         #: Control interface to Packetizerblock
         # 8 signals = 4 IFs (only half are real)
