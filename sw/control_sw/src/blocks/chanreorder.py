@@ -17,12 +17,16 @@ class ChanReorder(Block):
 
     :param n_chans: Number of channels in the system.
     :type n_chans: int
+
+    :param n_parallel_chans: Number of channels reordered in parallel.
+    :type n_parallel_chans: int
     """
-    n_parallel_chans = 8 #: Number of channels per reorder word
-    map_format = 'L'
-    def __init__(self, host, name, n_chans=2**10, logger=None):
+    _map_format = 'I'
+    _map_register = 'reorder_map1'
+    def __init__(self, host, name, n_chans=2**10, n_parallel_chans=4, logger=None):
         super(ChanReorder, self).__init__(host, name, logger)
         self.n_chans = n_chans
+        self.n_parallel_chans = n_parallel_chans
 
     def set_channel_order(self, order):
         """
@@ -43,7 +47,7 @@ class ChanReorder(Block):
         :param order: The order to which data should be mapped. I.e., if
             `order[0] = 16`, then the first channel out of the F-engine
             will be channel 16. The order map should meet the above criteria.
-            A ValueError exception will be raised if they are not.
+            A ValueError exception will be raised if it does not.
         :type order: list of int
         """
         order = list(order)
@@ -67,9 +71,9 @@ class ChanReorder(Block):
                 raise ValueError
         # The order to be written should reindex taking into account the parallel channels
         order_to_write = [x // 8 for x in order[::self.n_parallel_chans]]
-        order_str = struct.pack('>%d%s' %(self.n_chans // self.n_parallel_chans, self.map_format),
+        order_str = struct.pack('>%d%s' %(self.n_chans // self.n_parallel_chans, self._map_format),
                                    *order_to_write)
-        self.write('dynamic_map1', order_str)
+        self.write(self._map_register, order_str)
 
     def read_reorder(self, raw=False):
         """
@@ -83,8 +87,8 @@ class ChanReorder(Block):
         :return: The reorder map currently loaded.
         :rtype: list
         """
-        reorder = self.read('dynamic_map1', 4 * self.n_chans // self.n_parallel_chans)
-        reorder = struct.unpack('>%d%s'%(self.n_chans // self.n_parallel_chans, self.map_format), reorder)
+        reorder = self.read(self._map_register, struct.calcsize(self._map_format) * self.n_chans // self.n_parallel_chans)
+        reorder = struct.unpack('>%d%s'%(self.n_chans // self.n_parallel_chans, self._map_format), reorder)
         if raw:
             # Return the actual contents of the underlying map
             return reorder 
@@ -95,19 +99,6 @@ class ChanReorder(Block):
             for i in reorder:
                 expanded_order += list(range(i * self.n_parallel_chans, (i + 1) *  self.n_parallel_chans))
             return expanded_order
-
-    #def reindex_channel(self, input_index, output_index):
-    #    """
-    #    Reorder channels range(input_index : input_index + self.n_parallel_chans)
-    #    such that they emerge in positions range(output_index : output_index + self.n_parallel_chans)
-
-    #    Both `input_index` and `output_index` should be a multiple of `self.n_parallel_chans`
-    #    """
-    #    assert (input_index % self.n_parallel_chans == 0), \
-    #        "`input_index` must be a multiple of self.n_parallel_chans"
-    #    assert (output_index % self.n_parallel_chans == 0), \
-    #        "`input_index` must be a multiple of self.n_parallel_chans"
-    #    self.write_int('dynamic_map1', input_index, word_offset=output_index)
 
     def initialize(self, read_only=False):
         """
