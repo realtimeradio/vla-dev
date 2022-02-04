@@ -55,6 +55,15 @@ class Fpga(Block):
         bugfix = (v >>  0) & 0xff
         return "%d.%d.%d.%d" % (major, minor, rev, bugfix)
 
+    def get_firmware_type(self):
+        """
+        Read the firmware type register and return the contents as an integer.
+
+        :return type: Firmware type
+        :rtype str:
+        """
+        return self.read_uint('version_type')
+
     def get_build_time(self):
         """
         Read the UNIX time at which the current firmware was built.
@@ -107,6 +116,9 @@ class Fpga(Block):
             - fw_version (str): The version string of the currently running
               firmware. Available only if the board is programmed.
 
+            - fw_type (int): The firmware type ID of the currently running
+              firmware. Available only if the board is programmed.
+
             - fw_build_time (int): The build time of the firmware,
               as an ISO format string. Available only if the board 
               is programmed.
@@ -151,6 +163,7 @@ class Fpga(Block):
         stats['sw_version'] = __version__
         if stats['programmed']:
             stats['fw_version'] = self.get_firmware_version()
+            stats['fw_type'] = self.get_firmware_type()
             stats['fw_build_time'] = datetime.datetime.fromtimestamp(self.get_build_time()).isoformat()
         try:
             stats.update(self.sysmon.get_all_sensors())
