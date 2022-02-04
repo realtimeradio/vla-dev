@@ -21,15 +21,18 @@ from .blocks import vacc
 from .blocks import eth
 from .blocks import eq
 from .blocks import eqtvg
+from .blocks import chanreorder
 from .blocks import packetizer
 from .blocks import autocorr
 
 FENG_UDP_SOURCE_PORT = 10000
 MAC_BASE = 0x020203030400
 IP_BASE = (100 << 24) + (100 << 16) + (101 << 8) + 10
-NCHANS = 512
 NIFS = 2
 FPGA_CLOCK_RATE_HZ = 256000000
+FIRMWARE_TYPE_8BIT = 2
+FIRMWARE_TYPE_3BIT = 3
+DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
 
 class CosmicFengine():
     """
@@ -84,7 +87,32 @@ class CosmicFengine():
     def _initialize_blocks(self):
         """
         Initialize firmware blocks, populating the ``blocks`` attribute.
+        Choose initialization method based on firmware type
         """
+
+        f = fpga.Fpga(self._cfpga, "")
+        if f.is_programmed():
+            firmware_type = f.get_firmware_type()
+            self.logger.info("FPGA is programmed with firmware type %d" % firmware_type)
+        else:
+            firmware_type = DEFAULT_FIRMWARE_TYPE
+            self.logger.info("FPGA is not programmed. Defaulting to firmware type %d" % firmware_type)
+
+        if firmware_type == FIRMWARE_TYPE_8BIT:
+            self.logger.info("Initializing control blocks for 8-bit mode")
+            self._initialize_blocks_8bit()
+        elif firmware_type == FIRMWARE_TYPE_3BIT:
+            self.logger.info("Initializing control blocks for 3-bit mode")
+            self._initialize_blocks_3bit()
+        else:
+            self.logger.error("Can't initialize firmware control blocks because "
+                    "firmware version %d is not known" % firmware_type)
+
+    def _initialize_blocks_8bit(self):
+        """
+        Initialize firmware blocks, populating the ``blocks`` attribute.
+        """
+        NCHANS = 512
 
         # blocks
         #: Control interface to high-level FPGA functionality
@@ -148,7 +176,7 @@ class CosmicFengine():
             'dts'         : self.dts,
             'fpga'        : self.fpga,
             'sync'        : self.sync,
-            #'noisegen'    : self.noisegen,
+            'noisegen'    : self.noisegen,
             'input'       : self.input,
             'qsfp_a'      : self.qsfp_a,
             'qsfp_b'      : self.qsfp_b,
@@ -201,7 +229,7 @@ class CosmicFengine():
         """
         stats = {}
         flags = {}
-        if not self.blocks['fpga'].is_programmed():
+        if not self.fpga.is_programmed():
             stats['fpga'], flags['fpga'] = self.blocks['fpga'].get_status()
         else:
             for blockname, block in self.blocks.items():
@@ -223,7 +251,7 @@ class CosmicFengine():
         :type ignore_ok: bool
 
         """
-        if not self.blocks['fpga'].is_programmed():
+        if not self.fpga.is_programmed():
             print('FPGA stats (not programmed with F-engine image):')
             self.blocks['fpga'].print_status()
         else:
