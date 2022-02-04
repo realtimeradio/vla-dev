@@ -160,6 +160,10 @@ class CosmicFengine():
         self.eqtvg = eqtvg.EqTvg(self._cfpga, 'pipeline%d_post_eq_tvg' % self.pipeline_id,
                 n_inputs=4, n_serial_inputs=1, n_chans=NCHANS)
 
+        #: Control interface to channel reorder block
+        self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
+                n_times=16, n_signals=4, n_chans=NCHANS, n_parallel_chans=16)
+
         #: Control interface to Packetizerblock
         # 8 signals = 4 IFs (only half are real)
         self.packetizer = packetizer.Packetizer(self._cfpga,
@@ -187,6 +191,7 @@ class CosmicFengine():
             'autocorr'    : self.autocorr,
             'eq'          : self.eq,
             'eqtvg'       : self.eqtvg,
+            'chanreorder' : self.chanreorder,
             'eths'        : self.eths,
         }
 
