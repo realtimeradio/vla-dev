@@ -5,6 +5,8 @@ library xil_defaultlib;
 use xil_defaultlib.conv_pkg.all;
 entity uram_8192x512_latency3_core_ip_struct is
   port (
+    clk_1 : in std_logic;
+    ce_1 : in std_logic;
     data : in std_logic_vector( 512-1 downto 0 );
     addr : in std_logic_vector( 13-1 downto 0 );
     we   : in std_logic_vector( 1-1 downto 0 );
@@ -15,6 +17,7 @@ end uram_8192x512_latency3_core_ip_struct;
 architecture structural of uram_8192x512_latency3_core_ip_struct is
   component uram_8192x512_latency3_core_ip
     port (
+      clk : in std_logic;
       data : in std_logic_vector( 512-1 downto 0 );
       addr : in std_logic_vector( 13-1 downto 0 );
       we   : in std_logic_vector( 1-1 downto 0 );
@@ -24,6 +27,7 @@ architecture structural of uram_8192x512_latency3_core_ip_struct is
 begin
   uram_8192x512_latency3_core_ip_inst : uram_8192x512_latency3_core_ip
   port map (
+    clk => clk_1,
     data => data,
     addr => addr,
     we => we,
