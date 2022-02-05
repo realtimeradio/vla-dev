@@ -15,8 +15,8 @@ class ChanReorder(Block):
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
 
-    :param n_signals: Number of signals handled by this block.
-    :type n_signals: int
+    :param n_ants: Number of dual-pol signals handled by this block.
+    :type n_ants: int
 
     :param n_times: Number of times handled by this block.
     :type n_times: int
@@ -30,13 +30,13 @@ class ChanReorder(Block):
     _map_format = 'I'
     _map_register = 'dynamic_reorder_map1'
     def __init__(self, host, name,
-            n_signals=4,
+            n_ants=4,
             n_times=64,
             n_chans=2**10,
             n_parallel_chans=4,
             logger=None):
         super(ChanReorder, self).__init__(host, name, logger)
-        self.n_signals = n_signals
+        self.n_signals = n_ants
         self.n_times = n_times
         assert n_chans % n_parallel_chans == 0
         self.n_chans = n_chans

@@ -162,7 +162,7 @@ class CosmicFengine():
 
         #: Control interface to channel reorder block
         self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
-                n_times=16, n_signals=4, n_chans=NCHANS, n_parallel_chans=16)
+                n_times=16, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
 
         #: Control interface to Packetizerblock
         # 8 signals = 4 IFs (only half are real)
