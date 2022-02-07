@@ -209,7 +209,7 @@ class Packetizer(Block):
             I.e., packets must start on an n*`chan_block` boundary.
         :type chan_block_size: int
 
-        :return: packet_starts, packet_payloads, word_indices
+        :return: packet_starts, packet_payloads, word_indices, antchan_indices
 
             ``packet_starts`` : list of ints
                 The word indexes where packets start -- i.e., where headers should be
@@ -225,6 +225,11 @@ class Packetizer(Block):
                 [range(1,129), range(1025,1153), range(2049,2177), ... etc].
                 Data to be sent should be places in these ranges. Data words outside
                 these ranges won't be sent anywhere.
+            ``antchan_indices`` : list of range()
+                The range of input antchan indices this packet will send. Eg:
+                [range(1,129), range(1025,1153), range(2049,2177), ... etc].
+                Data to be sent should be places in these antchan ranges.
+                Data words outside these ranges won't be sent anywhere.
         """
 
         # In this packetizer, we arrange output data as:
@@ -273,6 +278,7 @@ class Packetizer(Block):
         starts = []
         payloads = []
         indices = []
+        antchans = []
         for i in range(n_ant_send):
             packets_per_ant = n_chan_send // n_pkt_chans
             for c in range(packets_per_ant):
@@ -282,14 +288,14 @@ class Packetizer(Block):
                 slot_stop = slot_start + req_slots_per_pkt
                 word_start = slot_start * self.n_words_per_chan
                 word_stop = slot_stop * self.n_words_per_chan
-                natural_antchan = slot_num * self.granularity // self.n_words_per_chan
-                natural_chan = natural_antchan % self.n_chans
-                natural_ant = natural_antchan // self.n_chans
+                antchan_start = word_start // self.n_words_per_chan
+                antchan_stop = word_stop // self.n_words_per_chan
                 starts += [slot_num]
                 payloads += [range(slot_start, slot_stop)]
                 indices += [range(word_start, word_stop)]
+                antchans += [range(antchan_start, antchan_stop)]
 
-        return starts, payloads, indices
+        return starts, payloads, indices, antchans
         
     def write_config(self, packet_starts, packet_payloads, channel_indices,
             antenna_indices, dest_ips, dest_ports, nchans_per_packet):

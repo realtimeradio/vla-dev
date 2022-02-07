@@ -162,7 +162,7 @@ class CosmicFengine():
 
         #: Control interface to channel reorder block
         self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
-                n_times=16, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
+                n_times=64, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
 
         #: Control interface to Packetizerblock
         # 8 signals = 4 IFs (only half are real)
@@ -551,36 +551,51 @@ class CosmicFengine():
         for dest in dests:
             channels_to_send += dest['nchan']
 
-        pkt_starts, pkt_payloads, word_indices = self.packetizer.get_packet_info(chans_per_packet, channels_to_send, ninput)
+        pkt_starts, pkt_payloads, word_indices, antchans = self.packetizer.get_packet_info(chans_per_packet, channels_to_send, ninput)
         n_pkts = len(pkt_starts)
         antchan_indices = np.arange(n_pkts*chans_per_packet, dtype=int)[::chans_per_packet]
         chan_indices = antchan_indices % channels_to_send
         ant_indices = antchan_indices // channels_to_send
 
+        # Reorder channels / antennas so they fall in the places we want
+        # Current map
+        ant_order, chan_order = self.chanreorder.get_antchan_order(raw=False)
+        # Start with whatever map is currently loaded. As long
+        # as we are double buffering, entries of the map are all independent.
+        # (If we are reordering in place every map entry must appear exactly once.
+        ant_order = np.array(ant_order, dtype=int)
+        chan_order = np.array(chan_order, dtype=int)
+
         ips = ['0.0.0.0' for _ in range(n_pkts)]
         ports = [0 for _ in range(n_pkts)]
+        pkt_num = 0
         ok = True
-        for dest in dests:
+        for dn, dest in enumerate(dests):
             try:
                 start_chan = dest['start_chan']
                 nchan = dest['nchan']
-                dest_ip = dest['ip']
-                dest_port = dest['port']
                 assert nchan % chans_per_packet == 0, "Can't send %d chans with %d-chan packets" % (nchan, chans_per_packet)
                 chans = range(start_chan, start_chan + nchan)
-                for chan in chans[::chans_per_packet]:
-                    for ifn in range(ninput):
-                        pkt_num = (chan // chans_per_packet)*ninput + ifn
+                dest_ip = dest['ip']
+                if dest_ip not in macs:
+                   self.logger.critical("MAC address for IP %s is not known" % dest_ip)
+                dest_port = dest['port']
+                # loop over packets to this destination, antenna slowest, chan fastest
+                for ant in range(ninput):
+                    for cn, chan in enumerate(chans[::chans_per_packet]):
                         ips[pkt_num] = dest_ip
                         ports[pkt_num] = dest_port
-                        if dest_ip not in macs:
-                            self.logger.critical("MAC address for IP %s is not known" % dest_ip)
+                        # Use the order maps to figure out where we should put these antchans
+                        ant_order[antchans[pkt_num]] = ant
+                        chan_order[antchans[pkt_num]] = chans[cn*chans_per_packet:(cn+1)*chans_per_packet]
+                        pkt_num += 1
             except:
                 self.logger.exception("Failed to parse destination %s" % dest)
                 ok = False
                 raise
 
         if ok:
+            self.chanreorder.set_antchan_order(ant_order, chan_order)
             self.packetizer.write_config(
                     pkt_starts,
                     pkt_payloads,
