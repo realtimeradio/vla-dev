@@ -259,6 +259,9 @@ class Packetizer(Block):
         # Divvy up the spare slots as evenly as we can
         spare_slots_per_pkt = spare_slots // req_packets
         self._info("%d spare slots per packet" % spare_slots_per_pkt)
+        # Need at least two words of spare space for EOF, and then a cycle of invalid data (irrational 100GbE core requirement)
+        assert spare_slots_per_pkt > 0, "Need at least one spare slot per packet!"
+        assert spare_slots_per_pkt*self.granularity >= 2 "Need at least two spare words per packet"
         total_slots_used = req_slots + (req_packets * spare_slots_per_pkt)
         self._info("%d used slots for data and spacing" % total_slots_used)
         assert total_slots_used <= self.n_slots
