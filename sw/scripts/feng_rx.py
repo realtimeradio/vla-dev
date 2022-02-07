@@ -35,6 +35,8 @@ parser.add_argument('-i', dest='ip', type=str, default='100.100.10.1',
                     help ='IP address on which to receive')
 parser.add_argument('-p', dest='port', type=int, default=10000,
                     help ='UDP port on which to receive')
+parser.add_argument('--payload', dest='print_payloads', action='store_true',
+                    help ='Print (some of) the packet payload')
 parser.add_argument('-f', dest='fname', type=str, default=None,
                     help ='Filename in which to dump packets')
 parser.add_argument('-t', dest='recordtime', type=int, default=20,
@@ -69,12 +71,13 @@ try:
         if args.fname is None:
             h, x, y = unpack(data)
             print(h)
-            for i in range(32):
-                print(x[i], end=' ')
-            print('|', end=' ')
-            for i in range(32):
-                print(y[i], end=' ')
-            print()
+            if args.print_payloads:
+                for i in range(32):
+                    print(x[i], end=' ')
+                print('|', end=' ')
+                for i in range(32):
+                    print(y[i], end=' ')
+                print()
         else:
             fh.write(data)
 except KeyboardInterrupt:
