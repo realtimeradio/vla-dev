@@ -327,9 +327,9 @@ class Sync(Block):
             self._error("Took too long to configure telescope time register")
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
-        self._info("Loaded new telescope time for %s (%.4f)" % (time.ctime(next_sync), next_sync))
-        self._info("Load completed at %.4f" % loaded_time)
         spare = next_sync - loaded_time
+        self._info("Loaded new telescope time (%d) for %s (%.4f)" % (next_sync_clocks, time.ctime(next_sync), next_sync))
+        self._info("Load completed at %.4f" % loaded_time)
         if spare < sync_period_s / 4: # Must have loaded at least 1/4 period before sync
             self._warning("Internal TT loaded with only %.2f milliseconds to spare" % (1000*spare))
         else:
