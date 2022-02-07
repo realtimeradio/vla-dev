@@ -72,12 +72,15 @@ try:
             h, x, y = unpack(data)
             print(h)
             if args.print_payloads:
-                for i in range(32):
-                    print(x[i], end=' ')
-                print('|', end=' ')
-                for i in range(32):
-                    print(y[i], end=' ')
-                print()
+                for j in range(5):
+                    for i in range(32):
+                        print(x[j*32+i], end=' ')
+                    print()
+                print('***************')
+                for j in range(5):
+                    for i in range(32):
+                        print(y[j*32+i], end=' ')
+                    print()
         else:
             fh.write(data)
 except KeyboardInterrupt:
