@@ -146,7 +146,7 @@ class CosmicFengine():
 
         #: Control interface to Input multiplexor / statistics
         self.input = input.Input(self._cfpga, 'pipeline%d_input' % self.pipeline_id,
-                n_inputs=4, n_bits=12, n_parallel_samples=8)
+                n_inputs=4, n_bits=8, n_parallel_samples=8)
 
         #: Control interface to noise generation block
         self.noisegen = noisegen.NoiseGen(self._cfpga, 'pipeline%d_noise' % self.pipeline_id,
