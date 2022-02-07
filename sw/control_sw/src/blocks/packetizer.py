@@ -3,6 +3,8 @@ import struct
 
 from .block import Block
 
+MAX_PACKET_SIZE_BYTES = 8192
+
 def _ip_to_int(ip):
     """
     convert an IP string (eg '10.11.10.1') to a 32-bit binary
@@ -48,8 +50,8 @@ class Packetizer(Block):
     :param n_chans: Number of frequency channels in the correlation output.
     :type n_chans: int
 
-    :param n_signals: Number of independent analog streams in the system.
-    :type n_signals: int
+    :param n_ants: Number of dual-polarization inputs streams in the system.
+    :type n_ants: int
 
     :param sample_rate_mhz: ADC sample rate in MHz. Used for data rate checks.
     :type sample_rate_mhz: float
@@ -69,20 +71,22 @@ class Packetizer(Block):
     :param granularity: The number of words per packetizer data block.
     :type granularity: int
     """
-    def __init__(self, host, name, n_chans=4096, n_signals=64, sample_rate_mhz=200.0,
+    def __init__(self, host, name, n_chans=4096, n_ants=4, sample_rate_mhz=200.0,
             sample_width=1, word_width=64, line_rate_gbps=100., n_time_packet=16,
             granularity=32, logger=None):
         super(Packetizer, self).__init__(host, name, logger)
+        NPOL = 2
         self.n_chans = n_chans
-        self.n_signals = n_signals
+        self.n_ants = n_ants
         self.sample_rate_mhz = sample_rate_mhz
         self.sample_width = sample_width
         self.word_width = word_width
         self.line_rate_gbps = line_rate_gbps
-        self.n_total_words = sample_width * n_chans * n_signals * n_time_packet // word_width
-        self.n_words_per_chan = self.sample_width * 2 * n_time_packet // self.word_width
-        self.full_data_rate_gbps = 8*self.sample_width * self.n_signals * self.sample_rate_mhz*1e6/2. / 1.0e9
+        self.n_total_words = NPOL * sample_width * n_chans * n_ants * n_time_packet // word_width
+        self.n_words_per_chan = NPOL * self.sample_width * n_time_packet // self.word_width
+        self.full_data_rate_gbps = 8*self.sample_width * self.n_ants * self.sample_rate_mhz*1e6 / 1.0e9
         self.granularity = granularity
+        self.n_slots = self.n_total_words // granularity
 
     def _populate_headers(self, headers):
         """
@@ -103,7 +107,7 @@ class Packetizer(Block):
           - `is_time_fastest`: Boolean, indicating this packet has a payload in
             channel [slowest] x time x polarization [fastest] order.
           - `n_chans`: Integer, indicating the number of channels in this data block's packet.
-          - `chans`: list of ints, indicating the channels present in this data block. The zeroth element is the first channel in this block.
+          - `chan`: Integer, indicating the first channel present in this data block.
           - `feng_id`: Integer, indicating the F-Engine ID of this block's data.
             This is usually always `self.feng_id`, but may vary if one board is spoofing
             traffic from multiple boards.
@@ -121,7 +125,7 @@ class Packetizer(Block):
                         + (int(h['is_8_bit']) << 49) \
                         + (int(h['is_time_fastest']) << 48) \
                         + ((h['n_chans'] & 0xffff) << 32) \
-                        + ((h['chans'][0] & 0xffff) << 16) \
+                        + ((h['chan'] & 0xffff) << 16) \
                         + ((h['feng_id'] & 0xffff) << 0)
             h_bytestr += struct.pack('>Q', header_word)
             ip_bytestr += struct.pack('>I', _ip_to_int(h['dest_ip']))
@@ -150,7 +154,7 @@ class Packetizer(Block):
           - `is_time_fastest`: Boolean, indicating this packet has a payload in
             channel [slowest] x time x polarization [fastest] order.
           - `n_chans`: Integer, indicating the number of channels in this data block's packet.
-          - `chans`: list of ints, indicating the channels present in this data block. The zeroth element is the first channel in this block.
+          - `chans`: list of ints, indicating the channels present in this data block.
           - `feng_id`: Integer, indicating the F-Engine ID of this block's data.
             This is usually always `self.feng_id`, but may vary if one board is spoofing
             traffic from multiple boards.
@@ -171,7 +175,7 @@ class Packetizer(Block):
         for dn, d in enumerate(hs):
             headers += [{}]
             headers[-1]['feng_id'] = (d >> 0) & 0xffff
-            headers[-1]['chans'] = [(d >> 16) & 0xffff]
+            headers[-1]['chans'] = (d >> 16) & 0xffff
             headers[-1]['n_chans'] = (d >> 32) & 0xffff
             headers[-1]['is_time_fastest'] = bool((d >> 48) & 1)
             headers[-1]['is_8_bit'] = bool((d >> 49) & 1)
@@ -182,14 +186,19 @@ class Packetizer(Block):
             headers[-1]['dest_port'] = ports[dn]
         return headers
 
-    def get_packet_info(self, n_pkt_chans, occupation=0.95, chan_block_size=8):
+    def get_packet_info(self, n_pkt_chans, n_chan_send, n_ant_send, occupation=0.985, chan_block_size=4):
         """
         Get the packet boundaries for packets containing a given number of
         frequency channels.
         
-
         :param n_pkt_chans: The number of channels per packet.
         :type n_pkt_chans: int
+
+        :param n_chan_send: The number of channels to send per input
+        :type n_chan_send: int
+
+        :param n_ant_send: The number of antennas to send
+        :type n_ant_send: int
 
         :param occupation: The maximum allowed throughput capacity of the underlying link.
             The calculation does not include application or protocol overhead,
@@ -200,7 +209,7 @@ class Packetizer(Block):
             I.e., packets must start on an n*`chan_block` boundary.
         :type chan_block_size: int
 
-        :return: packet_starts, packet_payloads, channel_indices, signal_numbers
+        :return: packet_starts, packet_payloads, word_indices
 
             ``packet_starts`` : list of ints
                 The word indexes where packets start -- i.e., where headers should be
@@ -211,40 +220,73 @@ class Packetizer(Block):
                 The range of indices where this packet's payload falls. Eg:
                 [range(1,257), range(1025,1281), range(2049,2305), ... etc]
                 These indices should be marked valid, and the last given an EOF.
-            ``channel_indices`` : list of range()
-                The range of channel indices this packet will send. Eg:
-                [range(1,129), range(1025,1153), range(2049,2177), ... etc]
-                Channels to be sent should be re-indexed so that they fall into
-                these ranges.
-            ``signal_numbers``: list of ints
-                The signal ID (I.e., IF) of each packet.
+            ``word_indices`` : list of range()
+                The range of input word indices this packet will send. Eg:
+                [range(1,129), range(1025,1153), range(2049,2177), ... etc].
+                Data to be sent should be places in these ranges. Data words outside
+                these ranges won't be sent anywhere.
         """
+
         # In this packetizer, we arrange output data as:
         # n_chans // 32 x IFs [2] x 50% duty cycle x chans [32] x n_time_packet x pol [2]
-        assert n_pkt_chans == 32, "Only 32 channels per packet is supported"
-        n_blocks = self.n_total_words // self.granularity
-        blocks_per_packet = self.n_words_per_chan * n_pkt_chans // self.granularity
-        n_packets = n_blocks // blocks_per_packet // 2 # 50% duty cycle
-        assert self.n_chans % n_pkt_chans == 0
-        n_chan_blocks = self.n_chans // n_pkt_chans
+        assert occupation < 1, "Link occupation must be < 1"
+        pkt_size = n_pkt_chans * self.n_words_per_chan * self.word_width
+        assert pkt_size <= MAX_PACKET_SIZE_BYTES, "Can't send packets > %d bytes!" % MAX_PACKET_SIZE_BYTES
 
-        packet_starts = []
-        packet_payloads = []
-        channel_indices = []
-        signal_numbers = []
-        b = 0
-        for c in range(n_chan_blocks):
-            for i in range(self.n_signals//2): # count in dual-pol steps
-                if i % 2 == 1:
-                    b += 1
-                    continue # 50% duty cycle
-                packet_starts += [b]
-                packet_payloads += [range(b,b+blocks_per_packet)]
-                channel_indices += [range(c*n_pkt_chans, (c+1)*n_pkt_chans)]
-                signal_numbers += [i//2]
-                b += 1
+        # Figure out what fraction of channels we can fit on the link
+        self._info("Full data rate is %.2f Gbps" % self.full_data_rate_gbps)
+        req_gbps = self.full_data_rate_gbps / self.n_ants / self.n_chans * n_chan_send * n_ant_send
 
-        return packet_starts, packet_payloads, channel_indices, signal_numbers
+        self._info("Trying to send %d ants and %d chans (%.2f Gbps)" % (n_ant_send, n_chan_send, req_gbps))
+        assert req_gbps <= occupation * self.line_rate_gbps, "Too much data!"
+
+        # How many slots do we need to send the required data
+        assert n_chan_send <= self.n_chans
+        assert n_ant_send <= self.n_ants
+        assert n_chan_send % n_pkt_chans == 0, "Number of channels to send is not integer number of packets"
+        req_packets = n_ant_send * n_chan_send // n_pkt_chans
+        self._info("Sending %d antenna-channels as %d packets" % (n_chan_send*n_ant_send, req_packets))
+        req_words = n_chan_send * n_ant_send * self.n_words_per_chan
+        assert (n_chan_send * self.n_words_per_chan) % self.granularity == 0
+        req_slots = req_words // self.granularity
+        assert req_slots % req_packets == 0
+        req_slots_per_pkt = req_slots // req_packets
+        self._info("Sending %d words in %d slots" % (req_words, req_slots))
+        spare_slots = self.n_slots - req_slots
+        self._info("%d spare slots available" % spare_slots)
+        assert spare_slots >= req_packets
+
+        # Divvy up the spare slots as evenly as we can
+        spare_slots_per_pkt = spare_slots // req_packets
+        self._info("%d spare slots per packet" % spare_slots_per_pkt)
+        total_slots_used = req_slots + (req_packets * spare_slots_per_pkt)
+        self._info("%d used slots for data and spacing" % total_slots_used)
+        assert total_slots_used <= self.n_slots
+
+        # Now we know where the slots are, figure out what channels / inputs they
+        # would naturally be associated with, if data comes from the upstream reorder in
+        # input x channel x time order.
+        # It's then up to the user to put inputs / channels in these slots.
+        starts = []
+        payloads = []
+        indices = []
+        for i in range(n_ant_send):
+            packets_per_ant = n_chan_send // n_pkt_chans
+            for c in range(packets_per_ant):
+                packet_num = i*packets_per_ant + c
+                slot_num = packet_num * (req_slots_per_pkt + spare_slots_per_pkt)
+                slot_start = slot_num
+                slot_stop = slot_start + req_slots_per_pkt
+                word_start = slot_start * self.n_words_per_chan
+                word_stop = slot_stop * self.n_words_per_chan
+                natural_antchan = slot_num * self.granularity // self.n_words_per_chan
+                natural_chan = natural_antchan % self.n_chans
+                natural_ant = natural_antchan // self.n_chans
+                starts += [slot_num]
+                payloads += [range(slot_start, slot_stop)]
+                indices += [range(word_start, word_stop)]
+
+        return starts, payloads, indices
         
     def write_config(self, packet_starts, packet_payloads, channel_indices,
             antenna_indices, dest_ips, dest_ports, nchans_per_packet):
@@ -284,18 +326,22 @@ class Packetizer(Block):
         All parameters should have identical lengths.
         """
         n_packets = len(packet_starts)
-        assert len(packet_payloads) == n_packets
-        assert len(channel_indices) == n_packets
-        assert len(antenna_indices) == n_packets
-        assert len(dest_ips) == n_packets
-        assert len(dest_ports) == n_packets
-        assert len(nchans_per_packet) == n_packets
 
-        n_headers = self.n_total_words // self.granularity
+        def check_length(x, expected_len, name):
+            if len(x) != expected_len:
+                self._error("%s list length %d for %d packets" % (name, len(x), expected_len))
+                raise RuntimeError
+
+        check_length(packet_payloads, n_packets, 'packet_payloads')
+        check_length(channel_indices, n_packets, 'channel_indices')
+        check_length(antenna_indices, n_packets, 'antenna indices')
+        check_length(dest_ips, n_packets, 'dest ips')
+        check_length(dest_ports, n_packets, 'dest_ports')
+        check_length(nchans_per_packet, n_packets, 'chans_per_packet')
 
         # generate template headers for all invalid data
         headers = []
-        for i in range(n_headers):
+        for i in range(self.n_slots):
             headers += [{
                 'first': False,
                 'valid': False,
@@ -303,7 +349,7 @@ class Packetizer(Block):
                 'is_8_bit': True,
                 'is_time_fastest': True,
                 'n_chans': 0,
-                'chans': [0],
+                'chan': 0,
                 'feng_id': 0,
                 'dest_ip': '0.0.0.0',
                 'dest_port': 0,
@@ -315,7 +361,7 @@ class Packetizer(Block):
             for j in packet_payloads[p]:
                 headers[j]['valid'] = dest_ips[p] != '0.0.0.0'
                 headers[j]['n_chans'] = nchans_per_packet[p]
-                headers[j]['chans'] = channel_indices[p]
+                headers[j]['chan'] = channel_indices[p]
                 headers[j]['feng_id'] = antenna_indices[p]
                 headers[j]['dest_ip'] = dest_ips[p]
                 headers[j]['dest_port'] = dest_ports[p]

@@ -149,7 +149,7 @@ class CosmicFengine():
                 n_inputs=4, n_bits=12, n_parallel_samples=8)
 
         #: Control interface to noise generation block
-        self.noisegen = noisegen.NoiseGen(self._cfpga, 'pipeline%d_input' % self.pipeline_id,
+        self.noisegen = noisegen.NoiseGen(self._cfpga, 'pipeline%d_noise' % self.pipeline_id,
                 n_noise=2, n_outputs=4, n_parallel_samples=8)
 
         #: Control interface to Equalization block
@@ -168,9 +168,9 @@ class CosmicFengine():
         # 8 signals = 4 IFs (only half are real)
         self.packetizer = packetizer.Packetizer(self._cfpga,
                 'pipeline%d_packetizer' % self.pipeline_id,
-                n_chans=512, n_signals=8, sample_rate_mhz=2048,
+                n_chans=512, n_ants=4, sample_rate_mhz=2048,
                 sample_width=2, word_width=64, line_rate_gbps=100.,
-                n_time_packet=16, granularity=32)
+                n_time_packet=64, granularity=4)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
@@ -547,21 +547,15 @@ class CosmicFengine():
                 eth.add_arp_entry(ip, mac)
 
         # Configure packetizer
-        # Packets are ordered as chan x input x (1 packet of `chan_per_packet` chans)
-        pkt_starts, pkt_payloads, chan_indices, sig_indices = self.packetizer.get_packet_info(chans_per_packet)
+        channels_to_send = 0
+        for dest in dests:
+            channels_to_send += dest['nchan']
+
+        pkt_starts, pkt_payloads, word_indices = self.packetizer.get_packet_info(chans_per_packet, channels_to_send, ninput)
         n_pkts = len(pkt_starts)
-
-        if n_pkts * chans_per_packet != NCHANS * ninput:
-            self.logger.error('Something is wrong with the number of channels being sent')
-            self.logger.error('npkts: %d' % n_pkts)
-            self.logger.error('chans_per_packet: %d' % chans_per_packet)
-            self.logger.error('Number of inputs: %d' % ninput)
-            self.logger.error('total channels: %d' % NCHANS)
-            raise RuntimeError
-
-        if ninput != NIFS:
-            self.logger.error('Number of inputs (%d) doesn\'t match number of IFs (%d)' % (ninput, NIFS))
-            raise RuntimeError
+        antchan_indices = np.arange(n_pkts*chans_per_packet, dtype=int)[::chans_per_packet]
+        chan_indices = antchan_indices % channels_to_send
+        ant_indices = antchan_indices // channels_to_send
 
         ips = ['0.0.0.0' for _ in range(n_pkts)]
         ports = [0 for _ in range(n_pkts)]
@@ -590,8 +584,8 @@ class CosmicFengine():
             self.packetizer.write_config(
                     pkt_starts,
                     pkt_payloads,
-                    chan_indices,
-                    sig_indices,
+                    chan_indices.tolist(),
+                    ant_indices.tolist(),
                     ips,
                     ports,
                     [chans_per_packet]*n_pkts,

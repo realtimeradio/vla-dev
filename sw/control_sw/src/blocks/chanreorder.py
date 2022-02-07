@@ -28,7 +28,7 @@ class ChanReorder(Block):
     :type n_parallel_chans: int
     """
     _map_format = 'I'
-    _map_register = 'dynamic_reorder_map1'
+    _map_register = 'reorder1_map1'
     def __init__(self, host, name,
             n_ants=4,
             n_times=64,
