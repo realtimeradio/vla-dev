@@ -258,7 +258,7 @@ class Sync(Block):
             self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_LOAD_INT)
             self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_LOAD_INT)
 
-    def get_tt_of_sync(self):
+    def get_tt_of_ext_sync(self):
         """
         Get the internal TT at which the last sync pulse arrived.
 
@@ -275,6 +275,16 @@ class Sync(Block):
             self._error("Failed to read TT without being interrupted by a sync. Is the sync rate very high?")
             raise RuntimeError
         return tt, sync_number
+
+    def get_tt_of_sync(self):
+        """
+        Get the internal TT of the last system sync event.
+
+        :return: tt. The internal TT of the last sync.
+        :rtype int:
+        """
+        tt = (self.read_uint('tt_sync_msb') << 32) + self.read_uint('tt_sync_lsb')
+        return tt
 
     def update_internal_time(self, fs_hz=None):
         """
@@ -293,8 +303,8 @@ class Sync(Block):
             raise
 
         # Figure out sync rate
-        tt0, sync0 = self.get_tt_of_sync()
-        tt1, sync1 = self.get_tt_of_sync()
+        tt0, sync0 = self.get_tt_of_ext_sync()
+        tt1, sync1 = self.get_tt_of_ext_sync()
         sync_period = (tt1 - tt0) / (sync1 - sync0)
         self._info("Detected sync period %.1f (2^%.1f) clocks" % (sync_period, log2(sync_period)))
         sync_period = int(sync_period)
