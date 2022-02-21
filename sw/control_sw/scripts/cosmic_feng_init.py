@@ -29,6 +29,8 @@ def main():
                         help='Program FPGAs with the pre-loaded fpg file')
     parser.add_argument('-f','--fpgfile', type=str, default=DEFAULT_FPGFILE,
                         help='Path to .fpg firmware file')
+    parser.add_argument('-R','--remote', type=str, default=None,
+                        help='URI to remote REST server')
     parser.add_argument('fpga_id', type=int, default=0,
                         help='FPGA pcie card ID')
     parser.add_argument('pipeline_id', type=int, default=0,
@@ -37,7 +39,10 @@ def main():
 
     hostname = 'pcie%d' % args.fpga_id
 
-    f = cosmic_fengine.CosmicFengine(hostname, args.fpgfile, pipeline_id=args.pipeline_id)
+    f = cosmic_fengine.CosmicFengine(
+        hostname, args.fpgfile, pipeline_id=args.pipeline_id,
+        remote_uri=args.remote
+    )
 
     f.cold_start_from_config(
             args.outputconfig,

@@ -54,7 +54,7 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
-    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None):
+    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
@@ -62,10 +62,22 @@ class CosmicFengine():
         #: Python Logger instance
         self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(__name__ + ":%s" % (host)))
         #: Underlying CasperFpga control instance
-        self._cfpga = casperfpga.CasperFpga(
-                        host=self.hostname,
-                        transport=casperfpga.LocalPcieTransport,
-                    )
+        if remote_uri is None:
+            self._cfpga = casperfpga.CasperFpga(
+                            host=self.hostname,
+                            transport=casperfpga.LocalPcieTransport,
+                        )
+        else:
+            self._cfpga = casperfpga.CasperFpga(
+                            host=self.hostname,
+                            uri=remote_uri,
+                            transport=casperfpga.RemotePcieTransport,
+                        )
+        
+            remotepcie = self._cfpga.transport
+            if True: #remotepcie.is_connected(0, 0) and not remotepcie.is_programmed():
+                print("Programmed Successfully:", remotepcie.upload_to_ram_and_program(fpgfile))
+
         try:
             self._cfpga.get_system_information(fpgfile)
         except:
