@@ -47,6 +47,9 @@ class CosmicFengine():
     :param pipeline_id: Zero-indexed ID of the pipeline on this host.
     :type pipeline_id: int
 
+    :param fpga_id: Zero-indexed ID of the fpga card. I.e., xdma driver instance number
+    :type fpga_id: int
+
     :param neths: Number of 100GbE interfaces for this pipeline.
     :type neths: int
 
@@ -54,7 +57,7 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
-    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
+    def __init__(self, host, fpgfile, fpga_id=0, pipeline_id=0, neths=1, logger=None, remote_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
@@ -66,12 +69,14 @@ class CosmicFengine():
             self._cfpga = casperfpga.CasperFpga(
                             host=self.hostname,
                             transport=casperfpga.LocalPcieTransport,
+                            instance_id=fpga_id,
                         )
         else:
             self._cfpga = casperfpga.CasperFpga(
                             host=self.hostname,
                             uri=remote_uri,
                             transport=casperfpga.RemotePcieTransport,
+                            instance_id=fpga_id,
                         )
         
             remotepcie = self._cfpga.transport
