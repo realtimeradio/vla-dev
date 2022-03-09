@@ -38,8 +38,15 @@ class CosmicFengine():
     """
     A control class for COSMIC's F-Engine firmware.
 
-    :param host: CasperFpga interface for host.
+    :param host: CasperFpga interface for host. If this is of the form `pcieAB`,
+        then it is assumed we are connecting to the FPGA card with pcie enumeration
+        `0xAB` via a REST server at the supplied `remote_uri`. If `host` is of the
+        form `xdmaA`, then we are connecting to the FPGA card with xdma driver
+        ID `xdmaA`. In this case, connection may be direct, or via a REST server.
     :type host: casperfpga.CasperFpga
+
+    :param remote_uri: REST host address, eg. `https://100.100.100.100:5000`
+    :type remote_uri: str
 
     :param fpgfile: .fpg file for firmware to program (or already loaded)
     :type fpgfile: str
@@ -57,7 +64,7 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
-    def __init__(self, host, fpgfile, fpga_id=0, pipeline_id=0, neths=1, logger=None, remote_uri=None):
+    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pci_id = host[4:] if host.startswith('pcie') else None
         self.instance_id = int(host[4:]) if host.startswith('xdma') else 0
@@ -72,7 +79,6 @@ class CosmicFengine():
                             host=self.hostname,
                             instance_id=self.instance_id,
                             transport=casperfpga.LocalPcieTransport,
-                            instance_id=fpga_id,
                         )
         else:
             self._cfpga = casperfpga.CasperFpga(
@@ -81,7 +87,6 @@ class CosmicFengine():
                             instance_id=self.instance_id,
                             uri=remote_uri,
                             transport=casperfpga.RemotePcieTransport,
-                            instance_id=fpga_id,
                         )
         
             remotepcie = self._cfpga.transport
