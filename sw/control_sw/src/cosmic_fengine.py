@@ -90,7 +90,7 @@ class CosmicFengine():
                         )
         
             remotepcie = self._cfpga.transport
-            if True: #remotepcie.is_connected(0, 0) and not remotepcie.is_programmed():
+            if remotepcie.is_connected(0, 0) and not remotepcie.is_programmed():
                 print("Programmed Successfully:", remotepcie.upload_to_ram_and_program(fpgfile))
 
         try:
