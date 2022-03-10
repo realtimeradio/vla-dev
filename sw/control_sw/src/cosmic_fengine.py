@@ -82,19 +82,24 @@ class CosmicFengine():
                             instance_id=self.instance_id,
                             transport=casperfpga.LocalPcieTransport,
                         )
+            try:
+                self._cfpga.get_system_information(fpgfile)
+            except:
+                self.logger.error("Failed to read and decode .fpg header %s" % fpgfile)
         else:
             self._cfpga = casperfpga.CasperFpga(
                             host=self.hostname, # server determines instance_id
                             uri=remote_uri,
                             transport=casperfpga.RemotePcieTransport,
                         )
-            # TODO get_system_information from remote server
-            # probably by requesting the last programmed fpg file.
+            if fpgfile is None:
+                # The remote transport will parse the remote fpg info, there is no file name
+                _, fpg_info = self._cfpga.transport.get_system_information_from_transport()
+                self._cfpga.get_system_information(filename=None, fpg_info=fpg_info)
+            else:
+                self._cfpga.upload_to_ram_and_program(fpgfile)
+            
 
-        try:
-            self._cfpga.get_system_information(fpgfile)
-        except:
-            self.logger.error("Failed to read and decode .fpg header %s" % fpgfile)
         self.blocks = {}
         try:
             self._initialize_blocks()
