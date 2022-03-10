@@ -38,14 +38,17 @@ class CosmicFengine():
     """
     A control class for COSMIC's F-Engine firmware.
 
-    :param host: CasperFpga interface for host. If this is of the form `pcieAB`,
-        then it is assumed we are connecting to the FPGA card with pcie enumeration
-        `0xAB` via a REST server at the supplied `remote_uri`. If `host` is of the
+    :param host: CasperFpga interface for host. If `host` is of the
         form `xdmaA`, then we are connecting to the FPGA card with xdma driver
         ID `xdmaA`. In this case, connection may be direct, or via a REST server.
+        If a REST server is supplied at `remote_uri`, this `host` parameter will
+        be interpreted on the server's side (see 
+        `RemotePcieTransport.__init__()` and
+        `casperfpga_rest_server:getXdmaIdFromTarget()`).
     :type host: casperfpga.CasperFpga
 
-    :param remote_uri: REST host address, eg. `https://100.100.100.100:5000`
+    :param remote_uri: REST host address, eg. `https://100.100.100.100:5000`. This 
+        triggers the transport to be a RemotePcieTransport object.
     :type remote_uri: str
 
     :param fpgfile: .fpg file for firmware to program (or already loaded)
@@ -66,7 +69,6 @@ class CosmicFengine():
     """
     def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
-        self.pci_id = host[4:] if host.startswith('pcie') else None
         self.instance_id = int(host[4:]) if host.startswith('xdma') else 0
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
@@ -82,16 +84,12 @@ class CosmicFengine():
                         )
         else:
             self._cfpga = casperfpga.CasperFpga(
-                            host=self.hostname,
-                            pci_id=self.pci_id,
-                            instance_id=self.instance_id,
+                            host=self.hostname, # server determines instance_id
                             uri=remote_uri,
                             transport=casperfpga.RemotePcieTransport,
                         )
-        
-            remotepcie = self._cfpga.transport
-            if remotepcie.is_connected(0, 0) and not remotepcie.is_programmed():
-                print("Programmed Successfully:", remotepcie.upload_to_ram_and_program(fpgfile))
+            # TODO get_system_information from remote server
+            # probably by requesting the last programmed fpg file.
 
         try:
             self._cfpga.get_system_information(fpgfile)
