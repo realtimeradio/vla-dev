@@ -38,8 +38,18 @@ class CosmicFengine():
     """
     A control class for COSMIC's F-Engine firmware.
 
-    :param host: CasperFpga interface for host.
+    :param host: CasperFpga interface for host. If `host` is of the
+        form `xdmaA`, then we are connecting to the FPGA card with xdma driver
+        ID `xdmaA`. In this case, connection may be direct, or via a REST server.
+        If a REST server is supplied at `remote_uri`, this `host` parameter will
+        be interpreted on the server's side (see 
+        `RemotePcieTransport.__init__()` and
+        `casperfpga_rest_server:getXdmaIdFromTarget()`).
     :type host: casperfpga.CasperFpga
+
+    :param remote_uri: REST host address, eg. `https://100.100.100.100:5000`. This 
+        triggers the transport to be a RemotePcieTransport object.
+    :type remote_uri: str
 
     :param fpgfile: .fpg file for firmware to program (or already loaded)
     :type fpgfile: str
@@ -57,8 +67,9 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
-    def __init__(self, host, fpgfile, fpga_id=0, pipeline_id=0, neths=1, logger=None, remote_uri=None):
+    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
+        self.instance_id = int(host[4:]) if host.startswith('xdma') else 0
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
         self.neths = neths
@@ -68,25 +79,27 @@ class CosmicFengine():
         if remote_uri is None:
             self._cfpga = casperfpga.CasperFpga(
                             host=self.hostname,
+                            instance_id=self.instance_id,
                             transport=casperfpga.LocalPcieTransport,
-                            instance_id=fpga_id,
                         )
+            try:
+                self._cfpga.get_system_information(fpgfile)
+            except:
+                self.logger.error("Failed to read and decode .fpg header %s" % fpgfile)
         else:
             self._cfpga = casperfpga.CasperFpga(
-                            host=self.hostname,
+                            host=self.hostname, # server determines instance_id
                             uri=remote_uri,
                             transport=casperfpga.RemotePcieTransport,
-                            instance_id=fpga_id,
                         )
-        
-            remotepcie = self._cfpga.transport
-            if True: #remotepcie.is_connected(0, 0) and not remotepcie.is_programmed():
-                print("Programmed Successfully:", remotepcie.upload_to_ram_and_program(fpgfile))
+            if fpgfile is None:
+                # The remote transport will parse the remote fpg info, there is no file name
+                _, fpg_info = self._cfpga.transport.get_system_information_from_transport()
+                self._cfpga.get_system_information(filename=None, fpg_info=fpg_info)
+            else:
+                self._cfpga.upload_to_ram_and_program(fpgfile)
+            
 
-        try:
-            self._cfpga.get_system_information(fpgfile)
-        except:
-            self.logger.error("Failed to read and decode .fpg header %s" % fpgfile)
         self.blocks = {}
         try:
             self._initialize_blocks()

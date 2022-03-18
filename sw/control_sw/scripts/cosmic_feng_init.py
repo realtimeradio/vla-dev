@@ -31,13 +31,13 @@ def main():
                         help='Path to .fpg firmware file')
     parser.add_argument('-R','--remote', type=str, default=None,
                         help='URI to remote REST server')
-    parser.add_argument('fpga_id', type=int, default=0,
+    parser.add_argument('fpga_id', type=str, default=0,
                         help='FPGA pcie card ID')
     parser.add_argument('pipeline_id', type=int, default=0,
                         help='Pipeline ID on chosen FPGA card')
     args = parser.parse_args()
 
-    hostname = 'pcie%d' % args.fpga_id
+    hostname = 'pcie%s' % args.fpga_id
 
     f = cosmic_fengine.CosmicFengine(
         hostname, args.fpgfile, pipeline_id=args.pipeline_id,
