@@ -45,6 +45,8 @@ class CosmicFengine():
         be interpreted on the server's side (see 
         `RemotePcieTransport.__init__()` and
         `casperfpga_rest_server:getXdmaIdFromTarget()`).
+        If `host` is of the form `pcieB`, then the connection is to the PCIe
+        device with enumeration 0xB
     :type host: casperfpga.CasperFpga
 
     :param remote_uri: REST host address, eg. `https://100.100.100.100:5000`. This 
@@ -56,9 +58,6 @@ class CosmicFengine():
 
     :param pipeline_id: Zero-indexed ID of the pipeline on this host.
     :type pipeline_id: int
-
-    :param fpga_id: Zero-indexed ID of the fpga card. I.e., xdma driver instance number
-    :type fpga_id: int
 
     :param neths: Number of 100GbE interfaces for this pipeline.
     :type neths: int
