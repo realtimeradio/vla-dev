@@ -37,10 +37,9 @@ def main():
                         help='Pipeline ID on chosen FPGA card')
     args = parser.parse_args()
 
-    hostname = 'pcie%s' % args.fpga_id
 
     f = cosmic_fengine.CosmicFengine(
-        hostname, args.fpgfile, pipeline_id=args.pipeline_id,
+        args.fpga_id, args.fpgfile, pipeline_id=args.pipeline_id,
         remote_uri=args.remote
     )
 
