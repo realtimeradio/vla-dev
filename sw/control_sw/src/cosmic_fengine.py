@@ -69,7 +69,6 @@ class CosmicFengine():
     """
     def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
-        self.instance_id = int(host[4:]) if host.startswith('xdma') else 0
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
         self.neths = neths
@@ -78,8 +77,7 @@ class CosmicFengine():
         #: Underlying CasperFpga control instance
         if remote_uri is None:
             self._cfpga = casperfpga.CasperFpga(
-                            host=self.hostname,
-                            instance_id=self.instance_id,
+                            host=self.hostname, # LocalPcieTransport determines deviceID/instanceID
                             transport=casperfpga.LocalPcieTransport,
                         )
             try:
