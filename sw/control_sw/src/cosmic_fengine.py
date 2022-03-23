@@ -195,7 +195,7 @@ class CosmicFengine():
         #: Control interface to Packetizerblock
         # 8 signals = 4 IFs (only half are real)
         self.packetizer = packetizer.Packetizer(self._cfpga,
-                'pipeline%d_packetizer' % self.pipeline_id,
+                'pipeline%d_packetizer0' % self.pipeline_id,
                 n_chans=512, n_ants=4, sample_rate_mhz=2048,
                 sample_width=2, word_width=64, line_rate_gbps=100.,
                 n_time_packet=64, granularity=4)
