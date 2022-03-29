@@ -23,9 +23,10 @@ class Eq(Block):
     :type n_coeffs: int
 
     """
-    _WIDTH = 16 #: Coefficient bit width
+    _WIDTH = 20 #: Coefficient bit width
     _BP = 5     #: Coefficient binary point position
-    _FORMAT = 'H'#'L' 
+    _FORMAT = 'L' 
+    _N_SUBSTREAM = 1
     def __init__(self, host, name, n_streams=64, n_coeffs=2**9, logger=None):
         super(Eq, self).__init__(host, name, logger)
         self.n_streams = n_streams
@@ -56,8 +57,8 @@ class Eq(Block):
         coeffs = list(coeffs)
         assert len(coeffs) == self.n_coeffs, "Length of provided coefficient vector should be %d" % self.n_coeffs
         coeffs_str = struct.pack('>%d%s' % (len(coeffs), self._FORMAT), *coeffs)
-        coeff_reg = 'pol%d_coeffs' % (stream // 16)
-        stream_sub_index = stream % 16
+        coeff_reg = 'pol%d_coeffs' % (stream // self._N_SUBSTREAM)
+        stream_sub_index = stream % self._N_SUBSTREAM
         self.write(coeff_reg, coeffs_str, offset=self._stream_size * stream_sub_index)
 
     def plot_all_coefficients(self, db=False):
@@ -93,8 +94,8 @@ class Eq(Block):
         :rtype: (numpy.ndarray, int)
 
         """
-        coeff_reg = 'pol%d_coeffs' % (stream // 16)
-        stream_sub_index = stream % 16
+        coeff_reg = 'pol%d_coeffs' % (stream // self._N_SUBSTREAM)
+        stream_sub_index = stream % self._N_SUBSTREAM
         coeffs_str = self.read(coeff_reg, self._stream_size, offset= self._stream_size * stream_sub_index)
         coeffs = np.array(struct.unpack('>%d%s' % (self.n_coeffs, self._FORMAT), coeffs_str))
         return coeffs, self._BP
@@ -108,7 +109,7 @@ class Eq(Block):
 
         """
         clip_cnt = 0
-        for i in range(self.n_streams // 16):
+        for i in range(self.n_streams // self._N_SUBSTREAM):
             clip_cnt += self.read_uint('pol%d_clip_cnt' % i)
         return clip_cnt
 
