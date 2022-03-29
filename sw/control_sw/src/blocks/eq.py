@@ -25,7 +25,7 @@ class Eq(Block):
     """
     _WIDTH = 20 #: Coefficient bit width
     _BP = 5     #: Coefficient binary point position
-    _FORMAT = 'L' 
+    _FORMAT = 'I' 
     _N_SUBSTREAM = 1
     def __init__(self, host, name, n_streams=64, n_coeffs=2**9, logger=None):
         super(Eq, self).__init__(host, name, logger)
