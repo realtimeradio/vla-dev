@@ -89,6 +89,15 @@ class Dts(Block):
     def mute(self):
         self._change_ctrl_reg_bits(0, 18, 1)
 
+    def get_lane_ids(self):
+        x, _ = self.get_status()
+        out = [0 for _ in range(self.nlanes)]
+        for k,v in x.items():
+            if k.endswith('chipnum'):
+                lane = int(k.split(':', 1)[0][4:])
+                out[lane] = v
+        return out
+
     def unmute(self):
         self._change_ctrl_reg_bits(1, 18, 1)
 
