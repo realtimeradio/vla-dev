@@ -133,7 +133,20 @@ class CosmicFengine():
             self._initialize_blocks_3bit()
         else:
             self.logger.error("Can't initialize firmware control blocks because "
-                    "firmware version %d is not known" % firmware_type)
+                    "firmware version %d is not known. Using minimal control set." % firmware_type)
+            self._initialize_blocks_basic()
+
+    def _initialize_blocks_basic(self):
+        """
+        Initialize a minimal set of blocks, which should be valid with even
+        just the template file.
+        """
+        self.fpga        = fpga.Fpga(self._cfpga, "")
+        self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id)
+        self.blocks = {
+            'dts'         : self.dts,
+            'fpga'        : self.fpga,
+        }
 
     def _initialize_blocks_8bit(self):
         """
