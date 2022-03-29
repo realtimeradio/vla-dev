@@ -219,8 +219,9 @@ class CosmicFengine():
             'eq'          : self.eq,
             'eqtvg'       : self.eqtvg,
             'chanreorder' : self.chanreorder,
-            'eths'        : self.eths,
         }
+        for en, ethdev in enumerate(self.eths):
+            self.blocks['eth%d' % en] = ethdev
 
     def initialize(self, read_only=True):
         """

@@ -5,6 +5,7 @@ from cosmic_f.error_levels import *
 
 class Pfb(Block):
     #DEFAULT_SHIFT = 0b0011011011111
+    STAGES = 10
     def __init__(self, host, name, nchan=2**10, nchan_parallel=8, logger=None):
         """
         :param host: CasperFpga interface for host.
