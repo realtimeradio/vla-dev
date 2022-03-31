@@ -5,7 +5,7 @@ import numpy as np
 from .block import Block
 from cosmic_f.error_levels import *
 
-LANE_MAP = [0, 1, 10, 11, 2, 3, 8, 9, 4, 5, 6, 7]
+LANE_MAP = [8,9,6,7,10,11,1,0,4,5,2,3]
 _LOCK_TIMEOUT_SECS = 1
 
 class Dts(Block):
@@ -314,6 +314,7 @@ class Dts(Block):
            print("%.4d" % dn, np.binary_repr(d & locked, width=12))
 
     def align_lanes(self, mux_factor=4, retries=0):
+        self.reset_delays()
         locked = self.get_lock_state()
         if locked == 0:
             self._error("Can't align because no lanes are locked!")
