@@ -659,3 +659,59 @@ class CosmicFengine():
                 eth.disable_tx()
 
         self.logger.info("Startup of %s complete" % self.hostname)
+
+    def read_chan_dest_ips_as_json(self):
+        '''
+        Reads the headers of the packetizer block and constructs a summative
+        report of the channels' destination-IPs, as a json string.
+        '''
+        headers = self.packetizer._read_headers()
+        
+        packet_dest_ips = []
+        for header in headers:
+            if not header['valid']:
+                continue
+            
+            if header['first']:
+                ip = header['dest_ip']
+            
+            if len(packet_dest_ips) > 0 and packet_dest_ips[-1]['dest'] == ip:
+                if header['chans'] > packet_dest_ips[-1]['end_chan']:
+                    packet_dest_ips[-1]['end_chan'] = header['chans']
+                elif header['chans'] < packet_dest_ips[-1]['start_chan']:
+                    packet_dest_ips[-1]['start_chan'] = header['chans']
+            else:
+                packet_dest_ips.append({
+                    'dest':ip,
+                    'feng_id':header['feng_id'],
+                    'start_chan':header['chans'],
+                    'end_chan':header['chans'],
+                    'packet_nchan':header['n_chans'],
+                    'is_8bit':header['is_8_bit']}
+                )
+
+        for packet_dest_ip in packet_dest_ips:
+            packet_dest_ip['end_chan'] += packet_dest_ip['packet_nchan']
+            
+            packet_dest_ip['n_chans'] = (
+                packet_dest_ip['end_chan'] - packet_dest_ip['start_chan']
+            )
+
+            packet_dest_ip['n_strm'] = (
+                packet_dest_ip['n_chans'] / packet_dest_ip['packet_nchan']
+            )
+            if packet_dest_ip['n_chans'] % packet_dest_ip['packet_nchan'] != 0:
+                print(
+                    ('Read headers from {} that indicate non-integer number of'
+                    ' streams, there is probably an issue in the collation'
+                    ' procedure: {} / {} = {}').format(
+                        feng.host,
+                        packet_dest_ip['n_chans'],
+                        packet_dest_ip['packet_nchan'],
+                        packet_dest_ip['n_strm']
+                    )
+                )
+            packet_dest_ip['n_strm'] = int(0.5 + packet_dest_ip['n_strm'])
+
+        # print('{}[{}]: {}\n'.format(feng.host, interface, packet_dest_ips))
+        return json.dumps(packet_dest_ips)
