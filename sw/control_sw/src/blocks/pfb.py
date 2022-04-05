@@ -96,18 +96,14 @@ class Pfb(Block):
         """
         assert start_chan % self.nchan_parallel == 0, "start_chan mult be a multiple of %d" % self.nchan_parallel
         # Full set of channels
-        chans = np.arange(self.nchan, dtype='>I')
+        chans = np.arange(self.nchan, dtype=int)
         # Shift so that the first channel we want is first
         chans = np.roll(chans, -start_chan)
         # Turn into word indices which take into account parallel samples
         chans = chans[::self.nchan_parallel] // self.nchan_parallel
         # interleave channels we don't want with those we do
         reorder_map = chans.reshape(2,-1).transpose().reshape(-1)
-        self._warning("Doubling up channel map to compensate for firmware bug")
-        reorder_map2 = np.zeros(reorder_map.shape[0]*2, dtype='>I')
-        reorder_map2[0:self.nchan//self.nchan_parallel] = reorder_map
-        reorder_map2[self.nchan//self.nchan_parallel:2*self.nchan//self.nchan_parallel] = reorder_map + (self.nchan//self.nchan_parallel)
-        map_str = reorder_map2.tobytes()
+        map_str = np.array(reorder_map, dtype='>I').tobytes()
         for reg in self.listdev():
             if reg.endswith('map1'):
                 self.write(reg, map_str)
