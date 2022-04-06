@@ -16,10 +16,11 @@ class Dts(Block):
     _REG_ADDRESS_TM = 0x4 # Timing Register
 
     _WB_ADDR_META = 6
-    def __init__(self, fpga, name, nlanes=12, logger=None):
+    def __init__(self, fpga, name, nlanes=12, lane_map=LANE_MAP, logger=None):
         super(Dts, self).__init__(fpga, name, logger)
         self.fpga = fpga
         self.nlanes = nlanes
+        self.lane_map = lane_map
 
     def _read_reg(self, regoffset=0):
         return self.read_uint('dts', word_offset=regoffset)
@@ -133,10 +134,13 @@ class Dts(Block):
         self._write_reg(1<<31, 1)
         self._write_reg(0, 1)
 
-    def set_lane_map(self, lanemap):
+    def set_lane_map(self, lane_map=None):
+        if lane_map is not None:
+            self.lane_map = lane_map
+        self._info("Setting lane map to %s" % self.lane_map)
         x = 0
         for i in range(self.nlanes):
-            x += (lanemap[i] << (4*i))
+            x += (self.lane_map[i] << (4*i))
         self._write_reg(x & 0xffffffff, 2)
         self._write_reg(x >> 32, 3)
 
@@ -274,7 +278,7 @@ class Dts(Block):
             time.sleep(0.1)
             locked = self.get_lock_state()
         self._info("Lock state: 0x%.3x" % locked)
-        self.set_lane_map(LANE_MAP)
+        self.set_lane_map()
         self.align_lanes()
         self.unmute()
 
