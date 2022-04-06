@@ -12,6 +12,7 @@ from .error_levels import *
 from .blocks import block
 from .blocks import fpga
 from .blocks import sync
+from .blocks import delay
 from .blocks import input
 from .blocks import noisegen
 from .blocks import qsfp
@@ -171,6 +172,10 @@ class CosmicFengine():
 
         self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id)
 
+        self.delay       = delay.Delay(self._cfpga,
+                'pipeline%d_delay' % self.pipeline_id,
+                n_streams = 4)
+
         self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id)
 
         #: Control interface for the Autocorrelation block
@@ -220,6 +225,7 @@ class CosmicFengine():
             'dts'         : self.dts,
             'fpga'        : self.fpga,
             'sync'        : self.sync,
+            'delay'       : self.delay,
             'noisegen'    : self.noisegen,
             'input'       : self.input,
             'qsfp_a'      : self.qsfp_a,

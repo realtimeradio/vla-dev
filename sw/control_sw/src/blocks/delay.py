@@ -1,5 +1,5 @@
 from .block import Block
-from lwa_f.error_levels import *
+from cosmic_f.error_levels import *
 
 class Delay(Block):
     """
@@ -18,7 +18,8 @@ class Delay(Block):
     :type n_streams: int
 
     """
-    MIN_DELAY = 0 #: minimum delay allowed
+    MIN_DELAY = 64 #: minimum delay allowed
+    DEFAULT_MAX_DELAY = 2**18 - 1
     def __init__(self, host, name, n_streams=64, logger=None):
         super(Delay, self).__init__(host, name, logger)
         self.n_streams = n_streams
@@ -33,7 +34,11 @@ class Delay(Block):
         :rtype: int
 
         """
-        self.max_delay = self.read_uint('max_delay')
+        try:
+            self.max_delay = self.read_uint('max_delay')
+        except:
+            self._warning("Couldn't real maximum delay. Defaulting to %d" % self.DEFAULT_MAX_DELAY)
+            self.max_delay = self.DEFAULT_MAX_DELAY
         return self.max_delay
 
     def set_delay(self, stream, delay):
@@ -57,13 +62,15 @@ class Delay(Block):
             self._error('Tried to set delay to %d which is > the allowed maximum (%d)' % (delay, self.max_delay))
             delay = self.max_delay-1
         self._debug('Setting delay of stream %d to %d' % (stream, delay))
-        control_id = stream // 32
-        enable_reg = 'delay_en%d' % (control_id)
-        delay_reg  = 'delay%d' % (control_id)
-        self.write_int(enable_reg, 0)
+        delay_reg  = 'delay%d_delay' % (stream)
         self.write_int(delay_reg, delay)
-        self.write_int(enable_reg, 1 << (31 - (stream % 32))) # MSB is channel 0
-        self.write_int(enable_reg, 0)
+
+    def force_load(self):
+        """
+        Force immediate load of all delays.
+        """
+        self.write_int('ctrl', 0b11)
+        self.write_int('ctrl', 0)
 
     def get_delay(self, stream):
         """
@@ -78,10 +85,8 @@ class Delay(Block):
         """
         if stream > self.n_streams:
             self._error('Tried to get delay for stream %d > n_streams (%d)' % (stream, self.n_streams))
-        control_id = stream//32
-        block = 'delay_store%d' % control_id
-        self.write_int('%s_sel' % block, stream % 32)
-        return self.read_uint('%s_readout' % block)
+        delay_reg = 'delay%d_loaded' % stream
+        return self.read_uint(delay_reg)
 
     def initialize(self, read_only=False):
         """
@@ -96,6 +101,7 @@ class Delay(Block):
         if not read_only:
             for i in range(self.n_streams):
                 self.set_delay(i, self.MIN_DELAY)
+        self.force_load()
 
     def get_status(self):
         """
