@@ -450,6 +450,7 @@ class CosmicFengine():
             macs = conf['xengines']['arp']
             source_ips = localconf['gbes']
             source_port = localconf['source_port']
+            dts_lane_map = localconf.get('dts_lane_map', None)
 
             dests = []
             for xeng, chans in conf['xengines']['chans'].items():
@@ -476,6 +477,7 @@ class CosmicFengine():
             source_ips = source_ips,
             source_port = source_port,
             dests = dests,
+            dts_lane_map = dts_lane_map,
             )
 
 
@@ -483,7 +485,7 @@ class CosmicFengine():
                    sync=True, sw_sync=False, enable_eth=True,
                    chans_per_packet=32, first_input_index=0, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
-                   dests=[]):
+                   dests=[], dts_lane_map=None):
         """
         Completely configure an F-engine from scratch.
 
@@ -548,11 +550,16 @@ class CosmicFengine():
                 ``nchans`` should be a multiple of ``chans_per_packet``.
         :type dests: List of dict
 
+        :param dts_lane_map: If not None, override the default DTS lane mapping as part of
+            initialization. This parameter does nothing if `initialize` is not True.
+
         """
         if program:
             self.program()
         
         if program or initialize:
+            if dts_lane_map is not None:
+                self.dts.lane_map = dts_lane_map
             self.initialize(read_only=False)
             self.logger.info('Updating telescope time')
             self.sync.update_internal_time()
