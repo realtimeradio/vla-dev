@@ -15,6 +15,7 @@ from .blocks import sync
 from .blocks import delay
 from .blocks import input
 from .blocks import noisegen
+from .blocks import sinegen
 from .blocks import qsfp
 from .blocks import dts
 from .blocks import pfb
@@ -22,6 +23,7 @@ from .blocks import vacc
 from .blocks import eth
 from .blocks import eq
 from .blocks import eqtvg
+from .blocks import corr
 from .blocks import chanreorder
 from .blocks import packetizer
 from .blocks import autocorr
@@ -197,6 +199,10 @@ class CosmicFengine():
         self.noisegen = noisegen.NoiseGen(self._cfpga, 'pipeline%d_noise' % self.pipeline_id,
                 n_noise=2, n_outputs=4, n_parallel_samples=8)
 
+        #: Control interface to sine TVG generation block
+        self.sinegen = sinegen.SineGen(self._cfpga, 'pipeline%d_sine_tvg' % self.pipeline_id,
+                n_sine=2, n_outputs=4, n_samples=2**13)
+
         #: Control interface to Equalization block
         self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id,
                 n_streams=4, n_coeffs=2**7)
@@ -204,6 +210,10 @@ class CosmicFengine():
         #: Control interface to post-equalization Test Vector Generator block
         self.eqtvg = eqtvg.EqTvg(self._cfpga, 'pipeline%d_post_eq_tvg' % self.pipeline_id,
                 n_inputs=4, n_serial_inputs=1, n_chans=NCHANS)
+
+        #: Control interface to post-equalization inter-IF correlation
+        self.corr = corr.Corr(self._cfpga, 'pipeline%d_corr' % self.pipeline_id,
+                n_signals=4, n_chans=NCHANS, n_parallel_chans=4)
 
         #: Control interface to channel reorder block
         self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
@@ -227,6 +237,7 @@ class CosmicFengine():
             'sync'        : self.sync,
             'delay'       : self.delay,
             'noisegen'    : self.noisegen,
+            'sinegen'     : self.sinegen,
             'input'       : self.input,
             'qsfp_a'      : self.qsfp_a,
             'qsfp_b'      : self.qsfp_b,
@@ -237,6 +248,7 @@ class CosmicFengine():
             'autocorr'    : self.autocorr,
             'eq'          : self.eq,
             'eqtvg'       : self.eqtvg,
+            'corr'        : self.corr,
             'chanreorder' : self.chanreorder,
         }
         for en, ethdev in enumerate(self.eths):
@@ -339,7 +351,10 @@ class CosmicFengine():
         :type target_rms: float
 
         """
-        n_cores = self.autocorr.n_signals // self.autocorr.n_signals_per_block
+        if self.autocorr._use_mux:
+            n_cores = self.autocorr.n_signals // self.autocorr.n_signals_per_block
+        else:
+            n_cores = 1
         for i in range(n_cores):
             spectra = self.autocorr.get_new_spectra(i, filter_ksize=filter_ksize)
             n_signals, n_chans = spectra.shape
