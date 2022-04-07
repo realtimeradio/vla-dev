@@ -3,7 +3,7 @@ import struct
 import numpy as np
 
 from .block import Block
-from lwa_f.error_levels import *
+from cosmic_f.error_levels import *
 
 class Corr(Block):
     """
@@ -24,17 +24,22 @@ class Corr(Block):
     :param n_chans: Number of frequency channels in the correlation output.
     :type n_chans: int
 
+    :param n_parallel_chans: Number of frequency channels processed in parallel.
+    :type n_parallel_chans: int
+
     :param n_signals: Number of independent signals which may be correlated.
     :type n_signals: int
     """
-    def __init__(self, host, name, acc_len=1024, logger=None, n_chans=1024, n_signals=64):
+    def __init__(self, host, name, acc_len=1024, logger=None, n_chans=1024, n_signals=64, n_parallel_chans=4):
         super(Corr, self).__init__(host, name, logger)
         self.n_chans = n_chans
+        self.n_parallel_chans = n_parallel_chans
         self.n_signals = n_signals
-        assert self.n_signals <= 2**8 # requirement from the mux control logic
         self.initial_acc_len = acc_len
-        self._chan_sum_factor = 8 #: Number of adjacent frequency channels internally summed
-        self._input_binary_point = 3 #: Input binary point
+        self._chan_sum_factor = 1 #: Number of adjacent frequency channels internally summed
+        self._input_binary_point = 7 #: Input binary point
+        self._format = '>i'
+        self._n_bytes_per_spectra = 2 * self.n_chans * struct.calcsize(self._format)
    
     def _set_input(self, signal1, signal2):
         """
@@ -48,7 +53,8 @@ class Corr(Block):
         """
         assert signal1 < self.n_signals
         assert signal2 < self.n_signals
-        self.write_int('input_sel',(signal1 + (signal2<<8)))
+        self.write_int('sel0', signal1)
+        self.write_int('sel1', signal2)
  
     def _wait_for_acc(self):
         """
@@ -60,13 +66,18 @@ class Corr(Block):
 
     def _read_bram(self):
         """ 
-        Read the RAM containing correlation spectra.
+        Read the RAM(s) containing correlation spectra.
 
-        :return: Array of autocorrelation data, in complex int32 format.
+        :return: Array of correlation data, in complex int32 format.
         :rtype: numpy.array
         """
-        spec = np.array(struct.unpack('>%sl' % (2*self.n_chans), self.read('dout',8*self.n_chans)))
-        spec = (spec[0::2]+1j*spec[1::2])
+        spec = np.zeros(self.n_chans, dtype=complex)
+        p = self.n_parallel_chans # shortcut
+        for i in range(p):
+            raw = self.read('dout%d' % i, self._n_bytes_per_spectra // p)
+            d = np.fromstring(raw, dtype=self._format)
+            spec[i::p].real = d[0::2]
+            spec[i::p].imag = d[1::2]
         return spec
     
     def get_new_corr(self, signal1, signal2, flush_vacc=True):
@@ -170,8 +181,8 @@ class Corr(Block):
         :return: Current accumulation length
         :rtype: int
         """
-        #Convert to spectra from clocks.
-        acc_len = self.read_int('acc_len') // self.n_chans
+        # Convert from FPGA clocks
+        acc_len = self.read_int('acc_len') // (self.n_chans // self.n_parallel_chans)
         return acc_len
 
     def set_acc_len(self,acc_len):
@@ -182,8 +193,9 @@ class Corr(Block):
         :type acc_len: int
         """
         assert isinstance(acc_len, int), "Cannot set accumulation length to type %r" % type(acc_len)
-        acc_len = self.n_chans*acc_len  # Convert from spectra to FPGA clocks
-        self.write_int('acc_len',acc_len)
+        # Convert to FPGA clocks
+        acc_len = acc_len * self.n_chans // self.n_parallel_chans
+        self.write_int('acc_len', acc_len)
 
     def get_status(self):
         """
