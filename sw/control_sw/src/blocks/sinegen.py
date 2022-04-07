@@ -36,7 +36,7 @@ class SineGen(Block):
         self.n_samples = n_samples
         self._bp = 8*struct.calcsize(self._format) - 1
 
-    def write_sine(self, n, period, cos=False):
+    def write_sine(self, n, period, amp=0.1, cos=False):
         """
         Write a sine wave.
 
@@ -49,12 +49,15 @@ class SineGen(Block):
         :param cos: If True, use a cosine, rather than a sine.
         :type cos: bool
 
+        :param amp: Sine wave amplitude. 1 will saturate the logic.
+        :type amp: float
+
         """
         assert n < self.n_sine, "Tried to assign sine source >= self.n_sine"
         if cos:
-            v = np.cos(2*np.pi / period * np.arange(self.n_samples)) * 0.1
+            v = np.cos(2*np.pi / period * np.arange(self.n_samples)) * amp
         else:
-            v = np.sin(2*np.pi / period * np.arange(self.n_samples)) * 0.1
+            v = np.sin(2*np.pi / period * np.arange(self.n_samples)) * amp
         v = np.array(v * 2**(self._bp), dtype=int)
         v[v>=(2**self._bp)] = 2**self._bp - 1
         v[v<-(2**self._bp)] = -2**self._bp
