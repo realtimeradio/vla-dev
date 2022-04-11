@@ -298,7 +298,11 @@ class CosmicFengine():
             stats['fpga'], flags['fpga'] = self.blocks['fpga'].get_status()
         else:
             for blockname, block in self.blocks.items():
-                stats[blockname], flags[blockname] = block.get_status()
+                if isinstance(block, list):
+                    for i, block_i in enumerate(block):
+                        stats[blockname+str(i)], flags[blockname+str(i)] = block_i.get_status()
+                else:
+                    stats[blockname], flags[blockname] = block.get_status()
         return stats, flags
 
     def print_status_all(self, use_color=True, ignore_ok=False):
@@ -321,8 +325,13 @@ class CosmicFengine():
             self.blocks['fpga'].print_status()
         else:
             for blockname, block in self.blocks.items():
-                print('Block %s stats:' % blockname)
-                block.print_status(use_color=use_color, ignore_ok=ignore_ok)
+                if isinstance(block, list):
+                    for i, block_i in enumerate(block):
+                        print('Block %s#%d stats:' % (blockname, i))
+                        block_i.print_status(use_color=use_color, ignore_ok=ignore_ok)
+                else:
+                    print('Block %s stats:' % blockname)
+                    block.print_status(use_color=use_color, ignore_ok=ignore_ok)
 
     def set_equalization(self, eq_start_chan=100, eq_stop_chan=400, 
             start_chan=50, stop_chan=450, filter_ksize=21, target_rms=0.2):
