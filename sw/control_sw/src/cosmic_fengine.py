@@ -5,6 +5,7 @@ import struct
 import time
 import datetime
 import os
+import json
 import casperfpga
 from . import helpers
 from . import __version__
@@ -693,6 +694,8 @@ class CosmicFengine():
         Reads the headers of the packetizer block and constructs a summative
         report of the channels' destination-IPs, as a json string.
         '''
+        if not hasattr(self, 'packetizer'):
+            return '{}'
         headers = self.packetizer._read_headers()
         
         packet_dest_ips = []
