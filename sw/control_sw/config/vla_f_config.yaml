@@ -2,26 +2,22 @@ fengines:
     chans_per_packet: 32
     pcie64:
         0:
-            inputs: [0, 2]
             feng_ids: [0, 1]
             gbes: ['100.100.102.20']
             source_port: 10000
             dts_lane_map: [8,9,6,7,10,11,1,0,4,5,3,2]
         1:
-            inputs: [2, 4]
             feng_ids: [2, 3]
             gbes: ['100.100.102.21']
             source_port: 10000
             dts_lane_map: [8,9,2,3,10,11,4,5,0,1,6,7]
     pcie65:
         0:
-            inputs: [4, 6]
             feng_ids: [4, 5]
             gbes: ['100.100.102.22']
             source_port: 10000
             dts_lane_map: [8,9,10,11,4,5,6,7,0,1,2,3]
         1:
-            inputs: [6, 8]
             feng_ids: [6, 7]
             gbes: ['100.100.102.23']
             source_port: 10000

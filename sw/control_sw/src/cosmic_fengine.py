@@ -476,13 +476,12 @@ class CosmicFengine():
             if localconf is None:
                 self.logger.exception("No configuration for pipeline %d found" % self.pipeline_id)
                 raise
-            first_input_index = localconf['inputs'][0]
-            ninput = localconf['inputs'][1] - first_input_index
+            feng_ids = localconf['feng_ids']
+            ninput = len(feng_ids)
             macs = conf['xengines']['arp']
             source_ips = localconf['gbes']
             source_port = localconf['source_port']
             dts_lane_map = localconf.get('dts_lane_map', None)
-            feng_ids = localconf['feng_ids']
 
             dests = []
             for xeng, chans in conf['xengines']['chans'].items():
@@ -503,7 +502,6 @@ class CosmicFengine():
             sw_sync = sw_sync,
             enable_eth = enable_eth,
             chans_per_packet = chans_per_packet,
-            first_input_index = first_input_index,
             ninput = ninput,
             macs = macs,
             source_ips = source_ips,
@@ -515,7 +513,7 @@ class CosmicFengine():
 
     def cold_start(self, program=True, initialize=True, test_vectors=False,
                    sync=True, sw_sync=False, enable_eth=True,
-                   chans_per_packet=32, first_input_index=0, ninput=NIFS,
+                   chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
                    dests=[], dts_lane_map=None):
         """
@@ -549,10 +547,6 @@ class CosmicFengine():
         :param chans_per_packet: Number of frequency channels in each output F-engine
             packet
         :type chans_per_packet: int
-
-        :param first_input_index: Zero-indexed ID of the first input connected to this
-            board.
-        :type first_input_index: int
 
         :param ninput: Number of inputs to be sent. Values of ``n*32`` may be used
             to spoof F-engine packets from multiple SNAP2 boards.
