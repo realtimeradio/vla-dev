@@ -482,6 +482,7 @@ class CosmicFengine():
             source_ips = localconf['gbes']
             source_port = localconf['source_port']
             dts_lane_map = localconf.get('dts_lane_map', None)
+            feng_ids = localconf['feng_ids']
 
             dests = []
             for xeng, chans in conf['xengines']['chans'].items():
@@ -489,7 +490,7 @@ class CosmicFengine():
                 dest_port = int(xeng.split('-')[1])
                 start_chan = chans[0]
                 nchan = chans[1] - start_chan
-                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan}]
+                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':feng_ids}]
         except:
             self.logger.exception("Failed to parse output configuration file %s" % config_file)
             raise
@@ -579,6 +580,8 @@ class CosmicFengine():
                 to this IP / port. ``start_chan`` should be an integer multiple of 16.
               - 'nchans' : The number of channels which should be sent to this IP / port.
                 ``nchans`` should be a multiple of ``chans_per_packet``.
+              - 'feng_ids': The identifying numbers of the antenna-streams,
+                as interpreted by the destination. 1 per tuning/input.
         :type dests: List of dict
 
         :param dts_lane_map: If not None, override the default DTS lane mapping as part of
@@ -646,6 +649,7 @@ class CosmicFengine():
         chan_order = np.array(chan_order, dtype=int)
 
         ips = ['0.0.0.0' for _ in range(n_pkts)]
+        feng_ids = [-1 for _ in range(n_pkts)]
         ports = [0 for _ in range(n_pkts)]
         pkt_num = 0
         ok = True
@@ -663,6 +667,7 @@ class CosmicFengine():
                 for ant in range(ninput):
                     for cn, chan in enumerate(chans[::chans_per_packet]):
                         ips[pkt_num] = dest_ip
+                        feng_ids[pkt_num] = ant if 'feng_ids' not in dest else dest['feng_ids'][ant]
                         ports[pkt_num] = dest_port
                         # Use the order maps to figure out where we should put these antchans
                         ant_order[antchans[pkt_num]] = ant
@@ -679,7 +684,7 @@ class CosmicFengine():
                     pkt_starts,
                     pkt_payloads,
                     chan_indices.tolist(),
-                    ant_indices.tolist(),
+                    feng_ids,
                     ips,
                     ports,
                     [chans_per_packet]*n_pkts,
@@ -714,8 +719,13 @@ class CosmicFengine():
             
             if header['first']:
                 ip = header['dest_ip']
+                feng_id = header['feng_id']
             
-            if len(packet_dest_ips) > 0 and packet_dest_ips[-1]['dest'] == ip:
+            if (len(packet_dest_ips) > 0 and
+                (packet_dest_ips[-1]['dest'] == ip
+                    and packet_dest_ips[-1]['feng_id'] == feng_id
+                )
+            ):
                 if header['chans'] > packet_dest_ips[-1]['end_chan']:
                     packet_dest_ips[-1]['end_chan'] = header['chans']
                 elif header['chans'] < packet_dest_ips[-1]['start_chan']:
@@ -723,7 +733,7 @@ class CosmicFengine():
             else:
                 packet_dest_ips.append({
                     'dest':ip,
-                    'feng_id':header['feng_id'],
+                    'feng_id':feng_id,
                     'start_chan':header['chans'],
                     'end_chan':header['chans'],
                     'packet_nchan':header['n_chans'],

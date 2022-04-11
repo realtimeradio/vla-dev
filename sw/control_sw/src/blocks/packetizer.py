@@ -298,7 +298,7 @@ class Packetizer(Block):
         return starts, payloads, indices, antchans
         
     def write_config(self, packet_starts, packet_payloads, channel_indices,
-            antenna_indices, dest_ips, dest_ports, nchans_per_packet):
+            antenna_ids, dest_ips, dest_ports, nchans_per_packet):
         """
         Write the packetizer configuration BRAMs with appropriate entries.
 
@@ -316,8 +316,8 @@ class Packetizer(Block):
             Header entries for the channel field of each packet to be sent
         :type channel_indices: list of ints
 
-        :param antenna_indices:
-            Header entries for the antenna field of each packet to be sent
+        :param antenna_ids:
+            Header entries for the antenna field (feng_id) of each packet to be sent
         :type ant_indices: list of ints
 
         :param dest_ips: list of str
@@ -343,7 +343,7 @@ class Packetizer(Block):
 
         check_length(packet_payloads, n_packets, 'packet_payloads')
         check_length(channel_indices, n_packets, 'channel_indices')
-        check_length(antenna_indices, n_packets, 'antenna indices')
+        check_length(antenna_ids, n_packets, 'antenna IDs')
         check_length(dest_ips, n_packets, 'dest ips')
         check_length(dest_ports, n_packets, 'dest_ports')
         check_length(nchans_per_packet, n_packets, 'chans_per_packet')
@@ -371,7 +371,7 @@ class Packetizer(Block):
                 headers[j]['valid'] = dest_ips[p] != '0.0.0.0'
                 headers[j]['n_chans'] = nchans_per_packet[p]
                 headers[j]['chan'] = channel_indices[p]
-                headers[j]['feng_id'] = antenna_indices[p]
+                headers[j]['feng_id'] = antenna_ids[p]
                 headers[j]['dest_ip'] = dest_ips[p]
                 headers[j]['dest_port'] = dest_ports[p]
             headers[packet_payloads[p][-1]]['last'] = True
