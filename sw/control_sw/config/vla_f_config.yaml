@@ -29,5 +29,19 @@ xengines:
     100.100.102.100: 0xb8cef6a64188
     100.100.103.100: 0xb8cef6a64189
   chans:
+    # Channel destinations are specified as:
+    # ip-port: [[feng_ids], [first_chan, last_chan+1]]
     # cosmic-gpu-0
-    100.100.103.100-10000: [0, 512]
+    100.100.103.100-10000:
+            # Send specific Feng IDs. This key overrides feng_range
+            # fengs: [0,1,2,3,4,5,6,7]
+            # Send a range of fengs. If [x,y] is given, send range(x,y).
+            # If [x,y,z] is given, send range(x,y,z)
+            feng_range: [0,8,2] # Even Feng-IDs
+            # Give [x,y] to send channel range range(x,y)
+            chan_range: [0,512]
+    # cosmic-gpu-0
+    100.100.103.100-20000:
+            feng_range: [1,8,2] # Off Feng-IDs
+            # Give [x,y] to send channel range range(x,y)
+            chan_range: [0,512]

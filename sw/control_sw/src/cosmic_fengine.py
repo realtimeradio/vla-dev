@@ -484,12 +484,24 @@ class CosmicFengine():
             dts_lane_map = localconf.get('dts_lane_map', None)
 
             dests = []
-            for xeng, chans in conf['xengines']['chans'].items():
+            #for xeng, chans in conf['xengines']['chans'].items():
+            for xeng, v in conf['xengines']['chans'].items():
                 dest_ip = xeng.split('-')[0]
                 dest_port = int(xeng.split('-')[1])
-                start_chan = chans[0]
-                nchan = chans[1] - start_chan
-                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':feng_ids}]
+                chan_range = v['chan_range']
+                start_chan = chan_range[0]
+                nchan = chan_range[1] - start_chan
+                if 'fengs' in v:
+                    fengs_this_dest = v['fengs']
+                elif 'feng_range' in v:
+                    fr = v['feng_range']
+                    fengs_this_dest = list(range(*fr))
+                #TODO: learn python
+                fengs_to_send = []
+                for f in feng_ids:
+                    if f in fengs_this_dest:
+                        fengs_to_send += [f]
+                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':fengs_to_send}]
         except:
             self.logger.exception("Failed to parse output configuration file %s" % config_file)
             raise
@@ -623,9 +635,20 @@ class CosmicFengine():
                 eth.add_arp_entry(ip, mac)
 
         # Configure packetizer
-        channels_to_send = 0
+        # FIXME: This might fail if all feng_ids for a given channel set aren't all sent.
+        # Figure out how many channels we are sending, by finding the maximum number of
+        # channels sent for a given feng id
+        channels_to_send_by_fid = {}
         for dest in dests:
-            channels_to_send += dest['nchan']
+            for f in dest['feng_ids']:
+                if f in channels_to_send_by_fid:
+                    channels_to_send_by_fid[f] += dest['nchan']
+                else:
+                    channels_to_send_by_fid[f] = dest['nchan']
+        channels_to_send = 0
+        for fid, nchans in channels_to_send_by_fid.items():
+            if nchans > channels_to_send:
+                channels_to_send = nchans
 
         pkt_starts, pkt_payloads, word_indices, antchans = self.packetizer.get_packet_info(chans_per_packet, channels_to_send, ninput)
         n_pkts = len(pkt_starts)
@@ -660,8 +683,13 @@ class CosmicFengine():
                 # loop over packets to this destination, antenna slowest, chan fastest
                 for ant in range(ninput):
                     for cn, chan in enumerate(chans[::chans_per_packet]):
+                        self.logger.debug('assigning dest %s; ant %d, chan %d' % (dest, ant, chan))
+                        try:
+                            feng_ids[pkt_num] = ant if 'feng_ids' not in dest else dest['feng_ids'][ant]
+                        except IndexError:
+                            self.logger.debug('skipping channel start %d for input %d because it isnt in the feng_ids list' % (chan, ant))
+                            continue
                         ips[pkt_num] = dest_ip
-                        feng_ids[pkt_num] = ant if 'feng_ids' not in dest else dest['feng_ids'][ant]
                         ports[pkt_num] = dest_port
                         # Use the order maps to figure out where we should put these antchans
                         ant_order[antchans[pkt_num]] = ant
