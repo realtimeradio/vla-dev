@@ -2,7 +2,8 @@ fengines:
     chans_per_packet: 32
     pcie64:
         0:
-            feng_ids: [0, 1]
+            # feng_ids defaults to [0, 1], enumeration of tunings
+            # feng_ids: [0, 1]
             gbes: ['100.100.102.20']
             source_port: 10000
             dts_lane_map: [8,9,6,7,10,11,1,0,4,5,3,2]

@@ -476,7 +476,7 @@ class CosmicFengine():
             if localconf is None:
                 self.logger.exception("No configuration for pipeline %d found" % self.pipeline_id)
                 raise
-            feng_ids = localconf['feng_ids']
+            feng_ids = localconf['feng_ids'] if 'feng_ids' in localconf else list(range(NIFS))
             ninput = len(feng_ids)
             macs = conf['xengines']['arp']
             source_ips = localconf['gbes']
