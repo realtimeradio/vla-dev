@@ -2,25 +2,38 @@ fengines:
     chans_per_packet: 32
     pcie64:
         0:
-            # feng_ids defaults to [0, 1], enumeration of tunings
+            # feng_ids defaults to [0, 1], 
             # feng_ids: [0, 1]
             gbes: ['100.100.102.20']
+            # dests defaults to the keys of xengines['chans']
             source_port: 10000
             dts_lane_map: [8,9,6,7,10,11,1,0,4,5,3,2]
         1:
             feng_ids: [2, 3]
             gbes: ['100.100.102.21']
+            dests: '100.100.103.100-10000' # all feng_ids
             source_port: 10000
             dts_lane_map: [8,9,2,3,10,11,4,5,0,1,6,7]
     pcie65:
         0:
             feng_ids: [4, 5]
             gbes: ['100.100.102.22']
+            dests: [
+                '100.100.102.100-10000', # feng_ids[0]
+                '100.100.103.100-10000' # feng_ids[1]
+            ]
             source_port: 10000
             dts_lane_map: [8,9,10,11,4,5,6,7,0,1,2,3]
         1:
             feng_ids: [6, 7]
             gbes: ['100.100.102.23']
+            dests: [
+                [ # feng_ids[0]
+                    '100.100.102.100-10000',
+                    '100.100.103.100-10000'
+                ], # feng_ids[0]
+                '100.100.103.100-10000' # feng_ids[1]
+            ]
             source_port: 10000
             dts_lane_map: [8,9,10,11,0,1,2,3,4,5,6,7]
 
@@ -31,18 +44,7 @@ xengines:
     100.100.103.100: 0xb8cef6a64189
   chans:
     # Channel destinations are specified as:
-    # ip-port: [[feng_ids], [first_chan, last_chan+1]]
+    # ip-port: [first_chan, last_chan+1]
     # cosmic-gpu-0
-    100.100.103.100-10000:
-            # Send specific Feng IDs. This key overrides feng_range
-            # fengs: [0,1,2,3,4,5,6,7]
-            # Send a range of fengs. If [x,y] is given, send range(x,y).
-            # If [x,y,z] is given, send range(x,y,z)
-            feng_range: [0,8,2] # Even Feng-IDs
-            # Give [x,y] to send channel range range(x,y)
-            chan_range: [0,512]
-    # cosmic-gpu-0
-    100.100.103.100-20000:
-            feng_range: [1,8,2] # Off Feng-IDs
-            # Give [x,y] to send channel range range(x,y)
-            chan_range: [0,512]
+    100.100.102.100-10000: [0,256]
+    100.100.103.100-10000: [256,512]

@@ -483,25 +483,69 @@ class CosmicFengine():
             source_port = localconf['source_port']
             dts_lane_map = localconf.get('dts_lane_map', None)
 
-            dests = []
-            #for xeng, chans in conf['xengines']['chans'].items():
-            for xeng, v in conf['xengines']['chans'].items():
-                dest_ip = xeng.split('-')[0]
-                dest_port = int(xeng.split('-')[1])
-                chan_range = v['chan_range']
-                start_chan = chan_range[0]
-                nchan = chan_range[1] - start_chan
-                if 'fengs' in v:
-                    fengs_this_dest = v['fengs']
-                elif 'feng_range' in v:
-                    fr = v['feng_range']
-                    fengs_this_dest = list(range(*fr))
-                #TODO: learn python
-                fengs_to_send = []
-                for f in feng_ids:
-                    if f in fengs_this_dest:
-                        fengs_to_send += [f]
-                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':fengs_to_send}]
+            xengine_chans = conf['xengines']['chans']
+
+            # construct {feng_id: dests} map, where dests is ['ip-port', ...]
+            # latter, the ip_port indexes into xengine_chans
+            if 'dests' not in localconf:
+                feng_dests_map = {
+                    feng_id: list(xengine_chans.keys())
+                    for feng_id in feng_ids
+                }
+            else:# if 'dests' in localconf:
+                dests = localconf['dests']
+                if isinstance(dests, str):
+                    # universal dest for feng_ids
+                    feng_dests_map = {
+                        feng_id: dests
+                        for idx, feng_id in enumerate(feng_ids)
+                    }
+                elif isinstance(dests, list):
+                    feng_dests_map = {
+                        feng_id: dests[idx]
+                        for idx, feng_id in enumerate(feng_ids)
+                    }
+                else:
+                    raise RuntimeError(
+                        ('fengines[{}][{}][\'dests\']'
+                            ' is not str nor list: {}').format(
+                                self.hostname,
+                                self.pipeline_id,
+                                dests
+                    ))
+
+            dests = {}
+            for feng_id, feng_dests in feng_dests_map.items():
+                if isinstance(feng_dests, str):
+                    feng_dests = [feng_dests]
+                for xeng in feng_dests:
+                    if xeng not in xengine_chans:
+                        raise RuntimeError(
+                            ('fengines[{}][{}][\'dests\']'
+                                ' {} is not in xengines[\'chans\']'
+                            ).format(
+                                    self.hostname,
+                                    self.pipeline_id,
+                                    xeng
+                            )
+                        )
+                    dest_ip = xeng.split('-')[0]
+                    dest_port = int(xeng.split('-')[1])
+                    chan_range = xengine_chans[xeng]
+                    start_chan = chan_range[0]
+                    nchan = chan_range[1] - start_chan
+
+                    dest_key = f'{xeng}:{start_chan}+{nchan}'
+                    if dest_key not in dests:
+                        dests[dest_key] = {
+                            'ip':dest_ip,
+                            'port':dest_port,
+                            'start_chan':start_chan,
+                            'nchan':nchan,
+                            'feng_ids':[feng_id]
+                        }
+                    elif feng_id not in dests[dest_key]['feng_ids']:
+                        dests[dest_key]['feng_ids'].append(feng_id)
         except:
             self.logger.exception("Failed to parse output configuration file %s" % config_file)
             raise
@@ -518,7 +562,7 @@ class CosmicFengine():
             macs = macs,
             source_ips = source_ips,
             source_port = source_port,
-            dests = dests,
+            dests = list(dests.values()),
             dts_lane_map = dts_lane_map,
             )
 
