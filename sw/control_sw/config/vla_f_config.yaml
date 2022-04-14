@@ -33,15 +33,20 @@ xengines:
     # ip-port: [[feng_ids], [first_chan, last_chan+1]]
     # cosmic-gpu-0
     100.100.103.100-10000:
+            # The feng_mask/feng_range_mask entries filter the feng_ids
+            # of the pipelines. The feng_ids that will actually be sent
+            # to the xengine-destination is the union of the mask and the
+            # pipeline's feng_ids list.
+            
             # Send specific Feng IDs. This key overrides feng_range
-            # fengs: [0,1,2,3,4,5,6,7]
+            # feng_mask: [0,1,2,3,4,5,6,7]
             # Send a range of fengs. If [x,y] is given, send range(x,y).
             # If [x,y,z] is given, send range(x,y,z)
-            feng_range: [0,8,2] # Even Feng-IDs
+            feng_range_mask: [0,8,2] # Even Feng-IDs
             # Give [x,y] to send channel range range(x,y)
             chan_range: [0,512]
     # cosmic-gpu-0
     100.100.103.100-20000:
-            feng_range: [1,8,2] # Off Feng-IDs
+            feng_range_mask: [1,8,2] # Odd Feng-IDs
             # Give [x,y] to send channel range range(x,y)
             chan_range: [0,512]

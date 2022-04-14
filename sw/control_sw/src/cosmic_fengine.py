@@ -491,10 +491,10 @@ class CosmicFengine():
                 chan_range = v['chan_range']
                 start_chan = chan_range[0]
                 nchan = chan_range[1] - start_chan
-                if 'fengs' in v:
-                    fengs_this_dest = v['fengs']
-                elif 'feng_range' in v:
-                    fr = v['feng_range']
+                if 'feng_mask' in v:
+                    fengs_this_dest = v['feng_mask']
+                elif 'feng_range_mask' in v:
+                    fr = v['feng_range_mask']
                     fengs_this_dest = list(range(*fr))
                 #TODO: learn python
                 fengs_to_send = []
