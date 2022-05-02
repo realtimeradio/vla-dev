@@ -5,6 +5,7 @@ import struct
 import time
 import datetime
 import os
+import json
 import casperfpga
 from . import helpers
 from . import __version__
@@ -12,8 +13,10 @@ from .error_levels import *
 from .blocks import block
 from .blocks import fpga
 from .blocks import sync
+from .blocks import delay
 from .blocks import input
 from .blocks import noisegen
+from .blocks import sinegen
 from .blocks import qsfp
 from .blocks import dts
 from .blocks import pfb
@@ -21,6 +24,7 @@ from .blocks import vacc
 from .blocks import eth
 from .blocks import eq
 from .blocks import eqtvg
+from .blocks import corr
 from .blocks import chanreorder
 from .blocks import packetizer
 from .blocks import autocorr
@@ -171,6 +175,10 @@ class CosmicFengine():
 
         self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id)
 
+        self.delay       = delay.Delay(self._cfpga,
+                'pipeline%d_delay' % self.pipeline_id,
+                n_streams = 4)
+
         self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id)
 
         #: Control interface for the Autocorrelation block
@@ -192,6 +200,10 @@ class CosmicFengine():
         self.noisegen = noisegen.NoiseGen(self._cfpga, 'pipeline%d_noise' % self.pipeline_id,
                 n_noise=2, n_outputs=4, n_parallel_samples=8)
 
+        #: Control interface to sine TVG generation block
+        self.sinegen = sinegen.SineGen(self._cfpga, 'pipeline%d_sine_tvg' % self.pipeline_id,
+                n_sine=2, n_outputs=4, n_samples=2**13)
+
         #: Control interface to Equalization block
         self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id,
                 n_streams=4, n_coeffs=2**7)
@@ -199,6 +211,10 @@ class CosmicFengine():
         #: Control interface to post-equalization Test Vector Generator block
         self.eqtvg = eqtvg.EqTvg(self._cfpga, 'pipeline%d_post_eq_tvg' % self.pipeline_id,
                 n_inputs=4, n_serial_inputs=1, n_chans=NCHANS)
+
+        #: Control interface to post-equalization inter-IF correlation
+        self.corr = corr.Corr(self._cfpga, 'pipeline%d_corr' % self.pipeline_id,
+                n_signals=4, n_chans=NCHANS, n_parallel_chans=4)
 
         #: Control interface to channel reorder block
         self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
@@ -220,7 +236,9 @@ class CosmicFengine():
             'dts'         : self.dts,
             'fpga'        : self.fpga,
             'sync'        : self.sync,
+            'delay'       : self.delay,
             'noisegen'    : self.noisegen,
+            'sinegen'     : self.sinegen,
             'input'       : self.input,
             'qsfp_a'      : self.qsfp_a,
             'qsfp_b'      : self.qsfp_b,
@@ -231,6 +249,7 @@ class CosmicFengine():
             'autocorr'    : self.autocorr,
             'eq'          : self.eq,
             'eqtvg'       : self.eqtvg,
+            'corr'        : self.corr,
             'chanreorder' : self.chanreorder,
         }
         for en, ethdev in enumerate(self.eths):
@@ -279,7 +298,11 @@ class CosmicFengine():
             stats['fpga'], flags['fpga'] = self.blocks['fpga'].get_status()
         else:
             for blockname, block in self.blocks.items():
-                stats[blockname], flags[blockname] = block.get_status()
+                if isinstance(block, list):
+                    for i, block_i in enumerate(block):
+                        stats[blockname+str(i)], flags[blockname+str(i)] = block_i.get_status()
+                else:
+                    stats[blockname], flags[blockname] = block.get_status()
         return stats, flags
 
     def print_status_all(self, use_color=True, ignore_ok=False):
@@ -302,8 +325,13 @@ class CosmicFengine():
             self.blocks['fpga'].print_status()
         else:
             for blockname, block in self.blocks.items():
-                print('Block %s stats:' % blockname)
-                block.print_status(use_color=use_color, ignore_ok=ignore_ok)
+                if isinstance(block, list):
+                    for i, block_i in enumerate(block):
+                        print('Block %s#%d stats:' % (blockname, i))
+                        block_i.print_status(use_color=use_color, ignore_ok=ignore_ok)
+                else:
+                    print('Block %s stats:' % blockname)
+                    block.print_status(use_color=use_color, ignore_ok=ignore_ok)
 
     def set_equalization(self, eq_start_chan=100, eq_stop_chan=400, 
             start_chan=50, stop_chan=450, filter_ksize=21, target_rms=0.2):
@@ -333,7 +361,10 @@ class CosmicFengine():
         :type target_rms: float
 
         """
-        n_cores = self.autocorr.n_signals // self.autocorr.n_signals_per_block
+        if self.autocorr._use_mux:
+            n_cores = self.autocorr.n_signals // self.autocorr.n_signals_per_block
+        else:
+            n_cores = 1
         for i in range(n_cores):
             spectra = self.autocorr.get_new_spectra(i, filter_ksize=filter_ksize)
             n_signals, n_chans = spectra.shape
@@ -445,8 +476,8 @@ class CosmicFengine():
             if localconf is None:
                 self.logger.exception("No configuration for pipeline %d found" % self.pipeline_id)
                 raise
-            first_input_index = localconf['inputs'][0]
-            ninput = localconf['inputs'][1] - first_input_index
+            feng_ids = localconf['feng_ids']
+            ninput = len(feng_ids)
             macs = conf['xengines']['arp']
             source_ips = localconf['gbes']
             source_port = localconf['source_port']
@@ -458,7 +489,7 @@ class CosmicFengine():
                 dest_port = int(xeng.split('-')[1])
                 start_chan = chans[0]
                 nchan = chans[1] - start_chan
-                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan}]
+                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':feng_ids}]
         except:
             self.logger.exception("Failed to parse output configuration file %s" % config_file)
             raise
@@ -471,7 +502,6 @@ class CosmicFengine():
             sw_sync = sw_sync,
             enable_eth = enable_eth,
             chans_per_packet = chans_per_packet,
-            first_input_index = first_input_index,
             ninput = ninput,
             macs = macs,
             source_ips = source_ips,
@@ -483,7 +513,7 @@ class CosmicFengine():
 
     def cold_start(self, program=True, initialize=True, test_vectors=False,
                    sync=True, sw_sync=False, enable_eth=True,
-                   chans_per_packet=32, first_input_index=0, ninput=NIFS,
+                   chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
                    dests=[], dts_lane_map=None):
         """
@@ -518,10 +548,6 @@ class CosmicFengine():
             packet
         :type chans_per_packet: int
 
-        :param first_input_index: Zero-indexed ID of the first input connected to this
-            board.
-        :type first_input_index: int
-
         :param ninput: Number of inputs to be sent. Values of ``n*32`` may be used
             to spoof F-engine packets from multiple SNAP2 boards.
         :type ninput: int
@@ -548,6 +574,8 @@ class CosmicFengine():
                 to this IP / port. ``start_chan`` should be an integer multiple of 16.
               - 'nchans' : The number of channels which should be sent to this IP / port.
                 ``nchans`` should be a multiple of ``chans_per_packet``.
+              - 'feng_ids': The identifying numbers of the antenna-streams,
+                as interpreted by the destination. 1 per tuning/input.
         :type dests: List of dict
 
         :param dts_lane_map: If not None, override the default DTS lane mapping as part of
@@ -615,6 +643,7 @@ class CosmicFengine():
         chan_order = np.array(chan_order, dtype=int)
 
         ips = ['0.0.0.0' for _ in range(n_pkts)]
+        feng_ids = [-1 for _ in range(n_pkts)]
         ports = [0 for _ in range(n_pkts)]
         pkt_num = 0
         ok = True
@@ -632,6 +661,7 @@ class CosmicFengine():
                 for ant in range(ninput):
                     for cn, chan in enumerate(chans[::chans_per_packet]):
                         ips[pkt_num] = dest_ip
+                        feng_ids[pkt_num] = ant if 'feng_ids' not in dest else dest['feng_ids'][ant]
                         ports[pkt_num] = dest_port
                         # Use the order maps to figure out where we should put these antchans
                         ant_order[antchans[pkt_num]] = ant
@@ -648,7 +678,7 @@ class CosmicFengine():
                     pkt_starts,
                     pkt_payloads,
                     chan_indices.tolist(),
-                    ant_indices.tolist(),
+                    feng_ids,
                     ips,
                     ports,
                     [chans_per_packet]*n_pkts,
@@ -672,6 +702,8 @@ class CosmicFengine():
         Reads the headers of the packetizer block and constructs a summative
         report of the channels' destination-IPs, as a json string.
         '''
+        if not hasattr(self, 'packetizer'):
+            return '{}'
         headers = self.packetizer._read_headers()
         
         packet_dest_ips = []
@@ -681,8 +713,13 @@ class CosmicFengine():
             
             if header['first']:
                 ip = header['dest_ip']
+                feng_id = header['feng_id']
             
-            if len(packet_dest_ips) > 0 and packet_dest_ips[-1]['dest'] == ip:
+            if (len(packet_dest_ips) > 0 and
+                (packet_dest_ips[-1]['dest'] == ip
+                    and packet_dest_ips[-1]['feng_id'] == feng_id
+                )
+            ):
                 if header['chans'] > packet_dest_ips[-1]['end_chan']:
                     packet_dest_ips[-1]['end_chan'] = header['chans']
                 elif header['chans'] < packet_dest_ips[-1]['start_chan']:
@@ -690,7 +727,7 @@ class CosmicFengine():
             else:
                 packet_dest_ips.append({
                     'dest':ip,
-                    'feng_id':header['feng_id'],
+                    'feng_id':feng_id,
                     'start_chan':header['chans'],
                     'end_chan':header['chans'],
                     'packet_nchan':header['n_chans'],
