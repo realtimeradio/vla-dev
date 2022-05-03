@@ -37,6 +37,7 @@ FPGA_CLOCK_RATE_HZ = 256000000
 FIRMWARE_TYPE_8BIT = 2
 FIRMWARE_TYPE_3BIT = 3
 DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
+DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
 
 class CosmicFengine():
     """
@@ -146,7 +147,8 @@ class CosmicFengine():
         just the template file.
         """
         self.fpga        = fpga.Fpga(self._cfpga, "")
-        self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id)
+        self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id,
+                lane_map=DEFAULT_DTS_LANE_MAPS[self.pipeline_id])
         self.blocks = {
             'dts'         : self.dts,
             'fpga'        : self.fpga,
@@ -156,7 +158,7 @@ class CosmicFengine():
         """
         Initialize firmware blocks, populating the ``blocks`` attribute.
         """
-        NCHANS = 512
+        NCHANS = 1024
 
         # blocks
         #: Control interface to high-level FPGA functionality
@@ -173,7 +175,8 @@ class CosmicFengine():
         self.qsfp_c      = qsfp.Qsfp(self._cfpga, 'qsfpc')
         self.qsfp_d      = qsfp.Qsfp(self._cfpga, 'qsfpd')
 
-        self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id)
+        self.dts         = dts.Dts(self._cfpga, 'pipeline%d_dts' % self.pipeline_id,
+                lane_map=DEFAULT_DTS_LANE_MAPS[self.pipeline_id])
 
         self.delay       = delay.Delay(self._cfpga,
                 'pipeline%d_delay' % self.pipeline_id,
@@ -468,6 +471,9 @@ class CosmicFengine():
                 self.logger.error("No 'xengines' key in output configuration!")
                 raise RuntimeError('Config file missing "xengines" key')
             chans_per_packet = conf['fengines']['chans_per_packet']
+            default_lane_map = conf['fengines'].get(['dts_lane_map'], list(range(12)))
+            if type(list, default_lane_map[0]):
+                default_lane_map = default_lane_map[self.pipeline_id % len(default_lane_map)]
             localboard = conf['fengines'].get(self.hostname, None)
             if localboard is None:
                 self.logger.exception("No configuration for F-engine host %s" % self.hostname)
@@ -481,7 +487,7 @@ class CosmicFengine():
             macs = conf['xengines']['arp']
             source_ips = localconf['gbes']
             source_port = localconf['source_port']
-            dts_lane_map = localconf.get('dts_lane_map', None)
+            dts_lane_map = localconf.get('dts_lane_map', default_lane_map)
 
             dests = []
             for xeng, chans in conf['xengines']['chans'].items():
