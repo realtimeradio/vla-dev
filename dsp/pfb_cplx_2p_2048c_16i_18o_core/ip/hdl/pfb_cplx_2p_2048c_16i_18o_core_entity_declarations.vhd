@@ -78,52 +78,6 @@ use xil_defaultlib.conv_pkg.all;
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
-entity sysgen_constant_2854c506ce is
-  port (
-    op : out std_logic_vector((7 - 1) downto 0);
-    clk : in std_logic;
-    ce : in std_logic;
-    clr : in std_logic);
-end sysgen_constant_2854c506ce;
-architecture behavior of sysgen_constant_2854c506ce
-is
-begin
-  op <= "0000000";
-end behavior;
-
-library xil_defaultlib;
-use xil_defaultlib.conv_pkg.all;
-
-library IEEE;
-use IEEE.std_logic_1164.all;
-use IEEE.numeric_std.all;
-entity sysgen_logical_14884e5d4e is
-  port (
-    d0 : in std_logic_vector((1 - 1) downto 0);
-    d1 : in std_logic_vector((1 - 1) downto 0);
-    y : out std_logic_vector((1 - 1) downto 0);
-    clk : in std_logic;
-    ce : in std_logic;
-    clr : in std_logic);
-end sysgen_logical_14884e5d4e;
-architecture behavior of sysgen_logical_14884e5d4e
-is
-  signal d0_1_24: std_logic;
-  signal d1_1_27: std_logic;
-  signal fully_2_1_bit: std_logic;
-begin
-  d0_1_24 <= d0(0);
-  d1_1_27 <= d1(0);
-  fully_2_1_bit <= d0_1_24 or d1_1_27;
-  y <= std_logic_to_vector(fully_2_1_bit);
-end behavior;
-
-library xil_defaultlib;
-use xil_defaultlib.conv_pkg.all;
-
-library IEEE;
-use IEEE.std_logic_1164.all;
-use IEEE.numeric_std.all;
 entity sysgen_relational_62d1041590 is
   port (
     a : in std_logic_vector((8 - 1) downto 0);
@@ -164,33 +118,6 @@ begin
   op_mem_37_22_front_din <= result_14_3_rel;
   op_mem_37_22_push_front_pop_back_en <= '1';
   op <= boolean_to_vector(op_mem_37_22_back);
-end behavior;
-
-library xil_defaultlib;
-use xil_defaultlib.conv_pkg.all;
-
-library IEEE;
-use IEEE.std_logic_1164.all;
-use IEEE.numeric_std.all;
-entity sysgen_relational_95acad05d5 is
-  port (
-    a : in std_logic_vector((7 - 1) downto 0);
-    b : in std_logic_vector((7 - 1) downto 0);
-    op : out std_logic_vector((1 - 1) downto 0);
-    clk : in std_logic;
-    ce : in std_logic;
-    clr : in std_logic);
-end sysgen_relational_95acad05d5;
-architecture behavior of sysgen_relational_95acad05d5
-is
-  signal a_1_31: unsigned((7 - 1) downto 0);
-  signal b_1_34: unsigned((7 - 1) downto 0);
-  signal result_12_3_rel: boolean;
-begin
-  a_1_31 <= std_logic_vector_to_unsigned(a);
-  b_1_34 <= std_logic_vector_to_unsigned(b);
-  result_12_3_rel <= a_1_31 = b_1_34;
-  op <= boolean_to_vector(result_12_3_rel);
 end behavior;
 
 library xil_defaultlib;
@@ -2204,6 +2131,33 @@ use xil_defaultlib.conv_pkg.all;
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
+entity sysgen_logical_14884e5d4e is
+  port (
+    d0 : in std_logic_vector((1 - 1) downto 0);
+    d1 : in std_logic_vector((1 - 1) downto 0);
+    y : out std_logic_vector((1 - 1) downto 0);
+    clk : in std_logic;
+    ce : in std_logic;
+    clr : in std_logic);
+end sysgen_logical_14884e5d4e;
+architecture behavior of sysgen_logical_14884e5d4e
+is
+  signal d0_1_24: std_logic;
+  signal d1_1_27: std_logic;
+  signal fully_2_1_bit: std_logic;
+begin
+  d0_1_24 <= d0(0);
+  d1_1_27 <= d1(0);
+  fully_2_1_bit <= d0_1_24 or d1_1_27;
+  y <= std_logic_to_vector(fully_2_1_bit);
+end behavior;
+
+library xil_defaultlib;
+use xil_defaultlib.conv_pkg.all;
+
+library IEEE;
+use IEEE.std_logic_1164.all;
+use IEEE.numeric_std.all;
 entity sysgen_mux_44d094724e is
   port (
     sel : in std_logic_vector((1 - 1) downto 0);
@@ -3079,6 +3033,25 @@ use xil_defaultlib.conv_pkg.all;
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
+entity sysgen_constant_2854c506ce is
+  port (
+    op : out std_logic_vector((7 - 1) downto 0);
+    clk : in std_logic;
+    ce : in std_logic;
+    clr : in std_logic);
+end sysgen_constant_2854c506ce;
+architecture behavior of sysgen_constant_2854c506ce
+is
+begin
+  op <= "0000000";
+end behavior;
+
+library xil_defaultlib;
+use xil_defaultlib.conv_pkg.all;
+
+library IEEE;
+use IEEE.std_logic_1164.all;
+use IEEE.numeric_std.all;
 entity sysgen_constant_ae2bfd4409 is
   port (
     op : out std_logic_vector((7 - 1) downto 0);
@@ -3090,6 +3063,33 @@ architecture behavior of sysgen_constant_ae2bfd4409
 is
 begin
   op <= "1000000";
+end behavior;
+
+library xil_defaultlib;
+use xil_defaultlib.conv_pkg.all;
+
+library IEEE;
+use IEEE.std_logic_1164.all;
+use IEEE.numeric_std.all;
+entity sysgen_relational_95acad05d5 is
+  port (
+    a : in std_logic_vector((7 - 1) downto 0);
+    b : in std_logic_vector((7 - 1) downto 0);
+    op : out std_logic_vector((1 - 1) downto 0);
+    clk : in std_logic;
+    ce : in std_logic;
+    clr : in std_logic);
+end sysgen_relational_95acad05d5;
+architecture behavior of sysgen_relational_95acad05d5
+is
+  signal a_1_31: unsigned((7 - 1) downto 0);
+  signal b_1_34: unsigned((7 - 1) downto 0);
+  signal result_12_3_rel: boolean;
+begin
+  a_1_31 <= std_logic_vector_to_unsigned(a);
+  b_1_34 <= std_logic_vector_to_unsigned(b);
+  result_12_3_rel <= a_1_31 = b_1_34;
+  op <= boolean_to_vector(result_12_3_rel);
 end behavior;
 
 library xil_defaultlib;
@@ -10032,6 +10032,8 @@ entity pfb_cplx_2p_2048c_16i_18o_core_xlcounter_free is
       clk: in std_logic;
       ce: in std_logic;
       SINIT: in std_logic;
+      load: in std_logic;
+      l: in std_logic_vector(op_width - 1 downto 0);
       q: out std_logic_vector(op_width - 1 downto 0) 
  		  ); 
  end component;
@@ -10041,8 +10043,6 @@ entity pfb_cplx_2p_2048c_16i_18o_core_xlcounter_free is
       clk: in std_logic;
       ce: in std_logic;
       SINIT: in std_logic;
-      load: in std_logic;
-      l: in std_logic_vector(op_width - 1 downto 0);
       q: out std_logic_vector(op_width - 1 downto 0) 
  		  ); 
  end component;
@@ -10212,6 +10212,8 @@ entity pfb_cplx_2p_2048c_16i_18o_core_xlcounter_free is
         clk => clk,
         ce => core_ce,
         SINIT => core_sinit,
+        load => load(0),
+        l => din,
         q => op_net
   ); 
    end generate;
@@ -10222,8 +10224,6 @@ entity pfb_cplx_2p_2048c_16i_18o_core_xlcounter_free is
         clk => clk,
         ce => core_ce,
         SINIT => core_sinit,
-        load => load(0),
-        l => din,
         q => op_net
   ); 
    end generate;
