@@ -156,7 +156,7 @@ class CosmicFengine():
         """
         Initialize firmware blocks, populating the ``blocks`` attribute.
         """
-        NCHANS = 512
+        NCHANS = 1024
 
         # blocks
         #: Control interface to high-level FPGA functionality
