@@ -83,7 +83,7 @@ class Pfb(Block):
         if stats['overflow_count'] != 0:
             flags['overflow_count'] = FENG_WARNING
         fft_shift = self.get_fft_shift()
-        stats['fft_shift'] = '0b%s' % np.binary_repr(fft_shift, width=self.STAGES)
+        # stats['fft_shift'] = '0b%s' % np.binary_repr(fft_shift, width=self.STAGES)
         return stats, flags
 
     def sel_band(self, start_chan=0):
