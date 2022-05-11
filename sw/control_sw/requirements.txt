@@ -7,3 +7,4 @@ pyyaml
 #python3-tk
 termcolor
 progressbar
+remoteobjects

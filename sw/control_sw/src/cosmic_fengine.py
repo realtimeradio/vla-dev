@@ -29,6 +29,8 @@ from .blocks import chanreorder
 from .blocks import packetizer
 from .blocks import autocorr
 
+from remoteobjects.client import defineRemoteClass
+
 FENG_UDP_SOURCE_PORT = 10000
 MAC_BASE = 0x020203030400
 IP_BASE = (100 << 24) + (100 << 16) + (101 << 8) + 10
@@ -40,6 +42,19 @@ DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
 DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
 
 class CosmicFengine():
+    def __new__(cls, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
+        if remoteobject_uri is not None:
+            defineRemoteClass(
+                'CosmicFengine',
+                remoteobject_uri,
+                globals(),
+                delete_remote_on_del=False,
+                allowed_upload_extension_regex=r'\.fpg|\.yaml',
+                attribute_depth_allowance=1,
+            )
+            return CosmicFengineRemote(remote_object_id=f'{host}_{pipeline_id}')
+        return object.__new__(CosmicFengine)
+
     """
     A control class for COSMIC's F-Engine firmware.
 
@@ -58,6 +73,10 @@ class CosmicFengine():
         triggers the transport to be a RemotePcieTransport object.
     :type remote_uri: str
 
+    :param remoteobjects_uri: RemoteObjects host address, eg. `https://100.100.100.100:6000`. This 
+        causes self to be a CosmicFengineRemote instance.
+    :type remoteobjects_uri: str
+
     :param fpgfile: .fpg file for firmware to program (or already loaded)
     :type fpgfile: str
 
@@ -71,7 +90,7 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
-    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
+    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
@@ -335,6 +354,12 @@ class CosmicFengine():
                 else:
                     print('Block %s stats:' % blockname)
                     block.print_status(use_color=use_color, ignore_ok=ignore_ok)
+
+    """
+    Have set_delay on this level
+    """
+    def set_delay(self, stream, delay):
+        self.delay.set_delay(stream, delay)
 
     def set_equalization(self, eq_start_chan=100, eq_stop_chan=400, 
             start_chan=50, stop_chan=450, filter_ksize=21, target_rms=0.2):
@@ -737,7 +762,11 @@ class CosmicFengine():
         report of the channels' destination-IPs, as a json string.
         '''
         if not hasattr(self, 'packetizer'):
-            return '{}'
+            return '[]'
+        
+        if not any([eth.tx_enabled() for eth in self.eths]):
+            return '[]'
+
         headers = self.packetizer._read_headers()
         
         packet_dest_ips = []
