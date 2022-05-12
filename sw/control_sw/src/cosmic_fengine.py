@@ -42,19 +42,6 @@ DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
 DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
 
 class CosmicFengine():
-    def __new__(cls, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
-        if remoteobject_uri is not None:
-            defineRemoteClass(
-                'CosmicFengine',
-                remoteobject_uri,
-                globals(),
-                delete_remote_on_del=False,
-                allowed_upload_extension_regex=r'\.fpg|\.yaml',
-                attribute_depth_allowance=1,
-            )
-            return CosmicFengineRemote(remote_object_id=f'{host}_{pipeline_id}')
-        return object.__new__(CosmicFengine)
-
     """
     A control class for COSMIC's F-Engine firmware.
 
@@ -69,11 +56,11 @@ class CosmicFengine():
         device with enumeration 0xB
     :type host: casperfpga.CasperFpga
 
-    :param remote_uri: REST host address, eg. `https://100.100.100.100:5000`. This 
+    :param remote_uri: REST host address, eg. `http://192.168.32.100:5000`. This 
         triggers the transport to be a RemotePcieTransport object.
     :type remote_uri: str
 
-    :param remoteobjects_uri: RemoteObjects host address, eg. `https://100.100.100.100:6000`. This 
+    :param remoteobjects_uri: RemoteObjects host address, eg. `http://192.168.32.100:6000`. This 
         causes self to be a CosmicFengineRemote instance.
     :type remoteobjects_uri: str
 
@@ -90,6 +77,20 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
+
+    def __new__(cls, host, fpgfile=None, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
+        if remoteobject_uri is not None:
+            defineRemoteClass(
+                'CosmicFengine',
+                remoteobject_uri,
+                globals(),
+                delete_remote_on_del=False,
+                allowed_upload_extension_regex=r'\.fpg|\.yaml',
+                attribute_depth_allowance=1,
+            )
+            return CosmicFengineRemote(remote_object_id=f'{host}_{pipeline_id}')
+        return object.__new__(CosmicFengine)
+
     def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pipeline_id = pipeline_id
