@@ -497,8 +497,8 @@ class CosmicFengine():
                 self.logger.error("No 'xengines' key in output configuration!")
                 raise RuntimeError('Config file missing "xengines" key')
             chans_per_packet = conf['fengines']['chans_per_packet']
-            default_lane_map = conf['fengines'].get(['dts_lane_map'], list(range(12)))
-            if type(list, default_lane_map[0]):
+            default_lane_map = conf['fengines'].get('dts_lane_map', list(range(12)))
+            if isinstance(default_lane_map[0], list):
                 default_lane_map = default_lane_map[self.pipeline_id % len(default_lane_map)]
             localboard = conf['fengines'].get(self.hostname, None)
             if localboard is None:
