@@ -29,8 +29,6 @@ from .blocks import chanreorder
 from .blocks import packetizer
 from .blocks import autocorr
 
-from remoteobjects.client import defineRemoteClass
-
 FENG_UDP_SOURCE_PORT = 10000
 MAC_BASE = 0x020203030400
 IP_BASE = (100 << 24) + (100 << 16) + (101 << 8) + 10
@@ -78,24 +76,6 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
-
-    def __new__(cls, host, fpgfile=None, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
-        """
-        This is prioritised constructor method. If remoteobject_uri is specified, a CosmicFengineRemote class instance
-        is returned instead of the expected `CosmicFengine` instance. In the latter case, the `__init__` method is
-        invoked with all the same arguments.
-        """
-        if remoteobject_uri is not None:
-            defineRemoteClass(
-                'CosmicFengine',
-                remoteobject_uri,
-                globals(),
-                delete_remote_on_del=False,
-                allowed_upload_extension_regex=r'\.fpg|\.yaml',
-                attribute_depth_allowance=1,
-            )
-            return CosmicFengineRemote(remote_object_id=f'{host}_{pipeline_id}')
-        return object.__new__(CosmicFengine)
 
     def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
