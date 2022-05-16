@@ -80,6 +80,11 @@ class CosmicFengine():
     """
 
     def __new__(cls, host, fpgfile=None, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
+        """
+        This is prioritised constructor method. If remoteobject_uri is specified, a CosmicFengineRemote class instance
+        is returned instead of the expected `CosmicFengine` instance. In the latter case, the `__init__` method is
+        invoked with all the same arguments.
+        """
         if remoteobject_uri is not None:
             defineRemoteClass(
                 'CosmicFengine',
@@ -428,8 +433,6 @@ class CosmicFengine():
         """
         if fpgfile is None:
             fpgfile = self.fpgfile
-        else:
-            self.fpgfile = fpgfile
 
         if fpgfile and not isinstance(fpgfile, str):
             raise TypeError("wrong type for fpgfile")
@@ -448,6 +451,8 @@ class CosmicFengine():
         except:
             self.logger.exception("Exception when reinitializing firmware blocks")
             raise RuntimeError("Error reinitializing blocks")
+        
+        self.fpgfile = fpgfile
 
     def cold_start_from_config(self, config_file,
                     program=True, initialize=True, test_vectors=False,
@@ -560,7 +565,7 @@ class CosmicFengine():
                    sync=True, sw_sync=False, enable_eth=True,
                    chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
-                   dests=[], dts_lane_map=None):
+                   dests=[], dts_lane_map=None, fpgfile=None):
         """
         Completely configure an F-engine from scratch.
 
@@ -626,9 +631,12 @@ class CosmicFengine():
         :param dts_lane_map: If not None, override the default DTS lane mapping as part of
             initialization. This parameter does nothing if `initialize` is not True.
 
+        :param fpgfile: The .fpg file to be loaded, if `program` is True. Should be a
+            path to a valid .fpg file. If None is given, and programming, self.fpgfile
+            will be loaded.
         """
         if program:
-            self.program()
+            self.program(fpgfile)
         
         if program or initialize:
             if dts_lane_map is not None:
