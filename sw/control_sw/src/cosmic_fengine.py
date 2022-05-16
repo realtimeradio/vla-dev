@@ -40,6 +40,7 @@ FIRMWARE_TYPE_8BIT = 2
 FIRMWARE_TYPE_3BIT = 3
 DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
 DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
+NTIME_PACKET = 32
 
 class CosmicFengine():
     """
@@ -241,15 +242,15 @@ class CosmicFengine():
 
         #: Control interface to channel reorder block
         self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
-                n_times=64, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
+                n_times=NTIME_PACKET, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
 
         #: Control interface to Packetizerblock
         # 8 signals = 4 IFs (only half are real)
         self.packetizer = packetizer.Packetizer(self._cfpga,
                 'pipeline%d_packetizer0' % self.pipeline_id,
-                n_chans=512, n_ants=4, sample_rate_mhz=2048,
+                n_chans=NCHANS, n_ants=4, sample_rate_mhz=2048,
                 sample_width=2, word_width=64, line_rate_gbps=100.,
-                n_time_packet=64, granularity=4)
+                n_time_packet=NTIME_PACKET, granularity=4)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
