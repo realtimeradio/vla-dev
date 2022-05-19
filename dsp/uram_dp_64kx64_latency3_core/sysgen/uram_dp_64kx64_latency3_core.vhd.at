@@ -1,0 +1,32 @@
+{
+  'Line_132' => {
+    'CodeInstance' => 'uram_dp_64kx64_latency3_core_default_clock_driver/clockdriver',
+    'Instance' => 'clockdriver',
+    'SimulinkInstance' => ''
+  },
+  'Line_169' => {
+    'CodeInstance' => 'uram_dp_64kx64_latency3_core_default_clock_driver',
+    'Instance' => 'uram_dp_64kx64_latency3_core_default_clock_driver',
+    'SimulinkInstance' => ''
+  },
+  'Line_177' => {
+    'CodeInstance' => 'uram_dp_64kx64_latency3_core_struct',
+    'Instance' => 'uram_dp_64kx64_latency3_core_struct',
+    'SimulinkInstance' => 'uram_dp_64kx64_latency3_core'
+  },
+  'Line_44' => {
+    'CodeInstance' => 'uram_dp_64kx64_latency3_core_struct/convert',
+    'Instance' => 'convert',
+    'SimulinkInstance' => 'uram_dp_64kx64_latency3_core/Convert'
+  },
+  'Line_65' => {
+    'CodeInstance' => 'uram_dp_64kx64_latency3_core_struct/convert1',
+    'Instance' => 'convert1',
+    'SimulinkInstance' => 'uram_dp_64kx64_latency3_core/Convert1'
+  },
+  'Line_86' => {
+    'CodeInstance' => 'uram_dp_64kx64_latency3_core_struct/bram0',
+    'Instance' => 'bram0',
+    'SimulinkInstance' => 'uram_dp_64kx64_latency3_core/bram0'
+  }
+}
