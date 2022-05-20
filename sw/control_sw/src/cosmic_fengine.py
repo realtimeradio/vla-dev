@@ -736,15 +736,21 @@ class CosmicFengine():
             self.logger.error("Not configuring Ethernet output because configuration builder failed")
 
         if enable_eth:
-            self.logger.info("Enabling Ethernet output")
-            for eth in self.eths:
-                eth.enable_tx()
+            self.enable_tx()
         else:
-            self.logger.info("Disabling Ethernet output")
-            for eth in self.eths:
-                eth.disable_tx()
+            self.disable_tx()
 
         self.logger.info("Startup of %s complete" % self.hostname)
+
+    def enable_tx(self):
+        self.logger.info("Enabling Ethernet output")
+        for eth in self.eths:
+            eth.enable_tx()
+
+    def disable_tx(self):
+        self.logger.info("Disabling Ethernet output")
+        for eth in self.eths:
+            eth.disable_tx()
 
     def read_chan_dest_ips_as_json(self):
         '''
