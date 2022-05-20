@@ -38,6 +38,7 @@ FIRMWARE_TYPE_8BIT = 2
 FIRMWARE_TYPE_3BIT = 3
 DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
 DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
+NTIME_PACKET = 32
 
 class CosmicFengine():
     """
@@ -54,9 +55,13 @@ class CosmicFengine():
         device with enumeration 0xB
     :type host: casperfpga.CasperFpga
 
-    :param remote_uri: REST host address, eg. `https://100.100.100.100:5000`. This 
+    :param remote_uri: REST host address, eg. `http://192.168.32.100:5000`. This 
         triggers the transport to be a RemotePcieTransport object.
     :type remote_uri: str
+
+    :param remoteobjects_uri: RemoteObjects host address, eg. `http://192.168.32.100:6000`. This 
+        causes self to be a CosmicFengineRemote instance.
+    :type remoteobjects_uri: str
 
     :param fpgfile: .fpg file for firmware to program (or already loaded)
     :type fpgfile: str
@@ -71,7 +76,8 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     """
-    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
+
+    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
@@ -221,15 +227,15 @@ class CosmicFengine():
 
         #: Control interface to channel reorder block
         self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
-                n_times=64, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
+                n_times=NTIME_PACKET, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
 
         #: Control interface to Packetizerblock
         # 8 signals = 4 IFs (only half are real)
         self.packetizer = packetizer.Packetizer(self._cfpga,
                 'pipeline%d_packetizer0' % self.pipeline_id,
-                n_chans=512, n_ants=4, sample_rate_mhz=2048,
+                n_chans=NCHANS, n_ants=4, sample_rate_mhz=2048,
                 sample_width=2, word_width=64, line_rate_gbps=100.,
-                n_time_packet=64, granularity=4)
+                n_time_packet=NTIME_PACKET, granularity=4)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
@@ -336,6 +342,12 @@ class CosmicFengine():
                     print('Block %s stats:' % blockname)
                     block.print_status(use_color=use_color, ignore_ok=ignore_ok)
 
+    """
+    Have set_delay on this level
+    """
+    def set_delay(self, stream, delay):
+        self.delay.set_delay(stream, delay)
+
     def set_equalization(self, eq_start_chan=100, eq_stop_chan=400, 
             start_chan=50, stop_chan=450, filter_ksize=21, target_rms=0.2):
         """
@@ -401,8 +413,6 @@ class CosmicFengine():
         """
         if fpgfile is None:
             fpgfile = self.fpgfile
-        else:
-            self.fpgfile = fpgfile
 
         if fpgfile and not isinstance(fpgfile, str):
             raise TypeError("wrong type for fpgfile")
@@ -421,6 +431,8 @@ class CosmicFengine():
         except:
             self.logger.exception("Exception when reinitializing firmware blocks")
             raise RuntimeError("Error reinitializing blocks")
+        
+        self.fpgfile = fpgfile
 
     def cold_start_from_config(self, config_file,
                     program=True, initialize=True, test_vectors=False,
@@ -471,8 +483,8 @@ class CosmicFengine():
                 self.logger.error("No 'xengines' key in output configuration!")
                 raise RuntimeError('Config file missing "xengines" key')
             chans_per_packet = conf['fengines']['chans_per_packet']
-            default_lane_map = conf['fengines'].get(['dts_lane_map'], list(range(12)))
-            if type(list, default_lane_map[0]):
+            default_lane_map = conf['fengines'].get('dts_lane_map', list(range(12)))
+            if isinstance(default_lane_map[0], list):
                 default_lane_map = default_lane_map[self.pipeline_id % len(default_lane_map)]
             localboard = conf['fengines'].get(self.hostname, None)
             if localboard is None:
@@ -490,12 +502,24 @@ class CosmicFengine():
             dts_lane_map = localconf.get('dts_lane_map', default_lane_map)
 
             dests = []
-            for xeng, chans in conf['xengines']['chans'].items():
+            #for xeng, chans in conf['xengines']['chans'].items():
+            for xeng, v in conf['xengines']['chans'].items():
                 dest_ip = xeng.split('-')[0]
                 dest_port = int(xeng.split('-')[1])
-                start_chan = chans[0]
-                nchan = chans[1] - start_chan
-                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':feng_ids}]
+                chan_range = v['chan_range']
+                start_chan = chan_range[0]
+                nchan = chan_range[1] - start_chan
+                if 'feng_mask' in v:
+                    fengs_this_dest = v['feng_mask']
+                elif 'feng_range_mask' in v:
+                    fr = v['feng_range_mask']
+                    fengs_this_dest = list(range(*fr))
+                #TODO: learn python
+                fengs_to_send = []
+                for f in feng_ids:
+                    if f in fengs_this_dest:
+                        fengs_to_send += [f]
+                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':fengs_to_send}]
         except:
             self.logger.exception("Failed to parse output configuration file %s" % config_file)
             raise
@@ -521,7 +545,7 @@ class CosmicFengine():
                    sync=True, sw_sync=False, enable_eth=True,
                    chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
-                   dests=[], dts_lane_map=None):
+                   dests=[], dts_lane_map=None, fpgfile=None):
         """
         Completely configure an F-engine from scratch.
 
@@ -587,9 +611,12 @@ class CosmicFengine():
         :param dts_lane_map: If not None, override the default DTS lane mapping as part of
             initialization. This parameter does nothing if `initialize` is not True.
 
+        :param fpgfile: The .fpg file to be loaded, if `program` is True. Should be a
+            path to a valid .fpg file. If None is given, and programming, self.fpgfile
+            will be loaded.
         """
         if program:
-            self.program()
+            self.program(fpgfile)
         
         if program or initialize:
             if dts_lane_map is not None:
@@ -629,9 +656,20 @@ class CosmicFengine():
                 eth.add_arp_entry(ip, mac)
 
         # Configure packetizer
-        channels_to_send = 0
+        # FIXME: This might fail if all feng_ids for a given channel set aren't all sent.
+        # Figure out how many channels we are sending, by finding the maximum number of
+        # channels sent for a given feng id
+        channels_to_send_by_fid = {}
         for dest in dests:
-            channels_to_send += dest['nchan']
+            for f in dest['feng_ids']:
+                if f in channels_to_send_by_fid:
+                    channels_to_send_by_fid[f] += dest['nchan']
+                else:
+                    channels_to_send_by_fid[f] = dest['nchan']
+        channels_to_send = 0
+        for fid, nchans in channels_to_send_by_fid.items():
+            if nchans > channels_to_send:
+                channels_to_send = nchans
 
         pkt_starts, pkt_payloads, word_indices, antchans = self.packetizer.get_packet_info(chans_per_packet, channels_to_send, ninput)
         n_pkts = len(pkt_starts)
@@ -666,8 +704,13 @@ class CosmicFengine():
                 # loop over packets to this destination, antenna slowest, chan fastest
                 for ant in range(ninput):
                     for cn, chan in enumerate(chans[::chans_per_packet]):
+                        self.logger.debug('assigning dest %s; ant %d, chan %d' % (dest, ant, chan))
+                        try:
+                            feng_ids[pkt_num] = ant if 'feng_ids' not in dest else dest['feng_ids'][ant]
+                        except IndexError:
+                            self.logger.debug('skipping channel start %d for input %d because it isnt in the feng_ids list' % (chan, ant))
+                            continue
                         ips[pkt_num] = dest_ip
-                        feng_ids[pkt_num] = ant if 'feng_ids' not in dest else dest['feng_ids'][ant]
                         ports[pkt_num] = dest_port
                         # Use the order maps to figure out where we should put these antchans
                         ant_order[antchans[pkt_num]] = ant
@@ -709,7 +752,11 @@ class CosmicFengine():
         report of the channels' destination-IPs, as a json string.
         '''
         if not hasattr(self, 'packetizer'):
-            return '{}'
+            return '[]'
+        
+        if not any([eth.tx_enabled() for eth in self.eths]):
+            return '[]'
+
         headers = self.packetizer._read_headers()
         
         packet_dest_ips = []

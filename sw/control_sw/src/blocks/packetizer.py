@@ -288,8 +288,8 @@ class Packetizer(Block):
                 slot_stop = slot_start + req_slots_per_pkt
                 word_start = slot_start * self.n_words_per_chan
                 word_stop = slot_stop * self.n_words_per_chan
-                antchan_start = word_start // self.n_words_per_chan
-                antchan_stop = word_stop // self.n_words_per_chan
+                antchan_start = n_ant_send * word_start // self.n_words_per_chan
+                antchan_stop = n_ant_send * word_stop // self.n_words_per_chan
                 starts += [slot_num]
                 payloads += [range(slot_start, slot_stop)]
                 indices += [range(word_start, word_stop)]

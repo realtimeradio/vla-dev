@@ -132,6 +132,12 @@ class Eth(Block):
         Disable Ethernet transmission.
         """
         self.change_reg_bits('ctrl', 0, 1)
+    
+    def tx_enabled(self):
+        """
+        Ethernet transmission enabled.
+        """
+        return self.get_reg_bits('ctrl', 1)
 
     def initialize(self, read_only=False):
         """

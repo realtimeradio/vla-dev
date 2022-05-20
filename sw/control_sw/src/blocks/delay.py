@@ -52,6 +52,10 @@ class Delay(Block):
         :type delay: int
 
         """
+        if delay < 0:
+            message = "User requested a negative delay %d" % (delay)
+            self._error(message)
+            raise RuntimeError(message)
         if delay < self.MIN_DELAY:
             self._warning("User requested delay of %d, but choosing %d because this is the minimum" % (delay, self.MIN_DELAY))
         if stream > self.n_streams:
