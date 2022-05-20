@@ -88,7 +88,7 @@ for fpga in fpga_hosts:
         except:
             expected_dt = None
         time.sleep(0.06)
-        dt = f0.fpga.read_int('pipeline_tt_offset') * 8 * 0.5e-9
+        dt = f0.fpga.read_int('pipeline_tt_offset') * 8 * (1./2.048e9)
         delays[fpga][pci] = {'expected': expected_dt, 'measured': dt}
         print("DELAYS:", fpga, pci, dt, expected_dt)
 
