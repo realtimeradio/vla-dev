@@ -34,6 +34,10 @@ class Sync(Block):
     def __init__(self, host, name, clk_hz=None, logger=None):
         super(Sync, self).__init__(host, name, logger)
         self.clk_hz = clk_hz
+
+        self.sync_wait_timeout_limit_s = 0.5
+        self.sync_wait_sleep_period_s = 0.0005
+        self.sync_wait_sleep_count_limit = self.sync_wait_timeout_limit_s//self.sync_wait_sleep_period_s
     
     def uptime(self):
         """
@@ -99,8 +103,10 @@ class Sync(Block):
         Block until a sync has been received.
         """
         c = self.count_ext()
-        while(self.count_ext() == c):
-            time.sleep(0.0005)
+        timeout = self.sync_wait_sleep_count_limit-2 # count down to -1, so condition is MSB
+        while(self.count_ext() == c and timeout >= 0):
+            time.sleep(self.sync_wait_sleep_period_s)
+            timeout -= 1
 
     #def wait_for_pps(self, timeout=2.0):
     #    """
@@ -305,6 +311,11 @@ class Sync(Block):
         # Figure out sync rate
         tt0, sync0 = self.get_tt_of_ext_sync()
         tt1, sync1 = self.get_tt_of_ext_sync()
+        if sync0 == sync1:
+            message = f'No sync pulse was detected over {self.sync_wait_timeout_limit_s} seconds.'
+            self.logger.error(message)
+            raise RuntimeError(message)
+
         sync_period = (tt1 - tt0) / (sync1 - sync0)
         self._info("Detected sync period %.1f (2^%.1f) clocks" % (sync_period, log2(sync_period)))
         sync_period = int(sync_period)
