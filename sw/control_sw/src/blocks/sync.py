@@ -292,7 +292,7 @@ class Sync(Block):
         tt = (self.read_uint('tt_sync_msb') << 32) + self.read_uint('tt_sync_lsb')
         return tt
 
-    def update_internal_time(self, fs_hz=None):
+    def update_internal_time(self, fs_hz=None, offset_ns=0.0):
         """
         Arm sync trigger receivers,
         having loaded an appropriate telescope time.
@@ -300,6 +300,10 @@ class Sync(Block):
         :param fs_hz: The FPGA DSP clock rate, in Hz. Used to set the
             telescope time counter. If None is provided, self.clk_hz will be used.
         :type fs_hz: int
+
+        :param offset_ns: Nanoseconds offset to add to the time loaded into the
+            internal telescope time counter.
+        :type offset_ns: float
 
         """
 
@@ -346,6 +350,7 @@ class Sync(Block):
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
             self._error("Took too long to configure telescope time register")
+        next_sync_clocks = int(next_sync_clocks + (offset_ns*1e-9 / fs_hz))
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
         spare = next_sync - loaded_time
