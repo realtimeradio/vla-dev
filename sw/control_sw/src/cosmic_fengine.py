@@ -342,12 +342,6 @@ class CosmicFengine():
                     print('Block %s stats:' % blockname)
                     block.print_status(use_color=use_color, ignore_ok=ignore_ok)
 
-    """
-    Have set_delay on this level
-    """
-    def set_delay(self, stream, delay):
-        self.delay.set_delay(stream, delay)
-
     def set_equalization(self, eq_start_chan=100, eq_stop_chan=400, 
             start_chan=50, stop_chan=450, filter_ksize=21, target_rms=0.2):
         """
