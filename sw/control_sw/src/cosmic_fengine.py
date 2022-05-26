@@ -539,7 +539,7 @@ class CosmicFengine():
                    sync=True, sw_sync=False, enable_eth=True,
                    chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
-                   dests=[], dts_lane_map=None, fpgfile=None):
+                   dests=[], dts_lane_map=None, fpgfile=None, sync_offset_ns=0.0):
         """
         Completely configure an F-engine from scratch.
 
@@ -608,6 +608,10 @@ class CosmicFengine():
         :param fpgfile: The .fpg file to be loaded, if `program` is True. Should be a
             path to a valid .fpg file. If None is given, and programming, self.fpgfile
             will be loaded.
+        
+        :param sync_offset_ns: Nanoseconds offset to add to the time loaded into the
+            internal telescope time counter.
+        :type sync_offset_ns: float
         """
         if program:
             self.program(fpgfile)
@@ -617,7 +621,7 @@ class CosmicFengine():
                 self.dts.lane_map = dts_lane_map
             self.initialize(read_only=False)
             self.logger.info('Updating telescope time')
-            self.sync.update_internal_time()
+            self.sync.update_internal_time(offset_ns = sync_offset_ns)
 
         if test_vectors:
             self.logger.info('Enabling EQ TVGs...')
