@@ -750,6 +750,12 @@ class CosmicFengine():
         for eth in self.eths:
             eth.disable_tx()
 
+    def tx_enabled(self):
+        '''
+        Returns `[eth.tx_enabled() for eth in self.eths]`. 
+        '''
+        return [eth.tx_enabled() for eth in self.eths]
+
     def read_chan_dest_ips_as_json(self):
         '''
         Reads the headers of the packetizer block and constructs a summative
