@@ -29,7 +29,6 @@ class CosmicFengine():
             CosmicFengineRemote_cldef = __COSMIC_FENGINE_REMOTE__
 
         if CosmicFengineRemote_cldef is None:
-            print('cosmic_f_remote: defining __COSMIC_FENGINE_REMOTE__')
             definition_dict={}
             defineRemoteClass(
                     'CosmicFengine',
