@@ -59,10 +59,6 @@ class CosmicFengine():
         triggers the transport to be a RemotePcieTransport object.
     :type remote_uri: str
 
-    :param remoteobjects_uri: RemoteObjects host address, eg. `http://192.168.32.100:6000`. This 
-        causes self to be a CosmicFengineRemote instance.
-    :type remoteobjects_uri: str
-
     :param fpgfile: .fpg file for firmware to program (or already loaded)
     :type fpgfile: str
 
@@ -77,7 +73,7 @@ class CosmicFengine():
 
     """
 
-    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None, remoteobject_uri=None):
+    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
