@@ -260,7 +260,7 @@ class CosmicFengine():
         for en, ethdev in enumerate(self.eths):
             self.blocks['eth%d' % en] = ethdev
 
-    def initialize(self, read_only=True):
+    def initialize(self, read_only=True, allow_unlocked_dts=False):
         """
         Call the ```initialize`` methods of all underlying blocks, then
         optionally issue a software global reset.
@@ -268,8 +268,13 @@ class CosmicFengine():
         :param read_only: If True, call the underlying initialization methods
             in a read_only manner, and skip software reset.
         :type read_only: bool
+        :param allow_unlocked_dts: If True, do not initialize the dts block
+        :type allow_unlocked_dts: bool
         """
         for blockname, b in self.blocks.items():
+            if (blockname == 'dts' and allow_unlocked_dts):
+                self.logger.info("Parameter allow_unlocked_dts = True, won't initialize %s" % blockname)
+                continue
             if read_only:
                 self.logger.info("Initializing block (read only): %s" % blockname)
             else:
