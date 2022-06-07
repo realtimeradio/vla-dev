@@ -184,7 +184,7 @@ class CosmicFengine():
                 'pipeline%d_delay' % self.pipeline_id,
                 n_streams = 4)
 
-        self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id)
+        self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id, nchan=NCHANS)
 
         #: Control interface for the Autocorrelation block
         self.autocorr = autocorr.AutoCorr(self._cfpga,
