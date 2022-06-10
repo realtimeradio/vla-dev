@@ -211,7 +211,7 @@ class CosmicFengine():
 
         #: Control interface to Equalization block
         self.eq = eq.Eq(self._cfpga, 'pipeline%d_eq' % self.pipeline_id,
-                n_streams=4, n_coeffs=2**7)
+                n_streams=4, n_coeffs=2**8)
 
         #: Control interface to post-equalization Test Vector Generator block
         self.eqtvg = eqtvg.EqTvg(self._cfpga, 'pipeline%d_post_eq_tvg' % self.pipeline_id,
