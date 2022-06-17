@@ -1,18 +1,11 @@
-.. |repopath| replace:: https://github.com/realtimeradio/caltech-lwa
+.. |repopath| replace:: https://github.com/realtimeradio/vla-dev
 .. |py-version| replace:: >=3.5
 
-Installation
-============
+Obtaining the Source Code
+=========================
 
-The LWA 352 F-Engine pipeline is available at |repopath|.
+The COSMIC F-Engine pipeline is available at |repopath|.
 Follow the following instructions to download and install the pipeline.
-
-Specify the build directory by defining the ``BUILDDIR`` environment variable, eg:
-
-.. code-block::
-
-  export BUILDDIR=~/src/
-  mkdir -p $BUILDDIR
 
 Get the Source Code
 -------------------
@@ -22,12 +15,10 @@ Clone the repository and its dependencies with:
 .. code-block::
 
   # Clone the main repository
-  cd $BUILDDIR
-  git clone https://github.com/realtimeradio/caltech-lwa
+  git clone https://github.com/realtimeradio/vla-dev
   # Clone relevant submodules
-  cd caltech-lwa
-  git submodule init
-  git submodule update
+  cd vla-dev
+  git submodule update --init --recursive
 
 Install Prerequisites
 ---------------------
@@ -35,7 +26,7 @@ Install Prerequisites
 Firmware Requirements
 +++++++++++++++++++++
 
-The LWA-253 F-Engine firmware can be built with the CASPER toolflow, and was
+The COSMIC F-Engine firmware can be built with the CASPER toolflow, and was
 designed using the following software stack:
 
   - Ubuntu 18.04.0 LTS (64-bit)

@@ -132,16 +132,16 @@ See :numref:`control-interface` for a full software API description
 
 .. code-block:: python
 
-  # Import the SNAP2 F-Engine library
-  from cosmic_f import cosmic_fengine
+  # Import the COSMIC F-Engine control library
+  from cosmic_f import CosmicFengine
 
-  # Instantiate a CosmicFengine instance to a board with
-  # hostname 'snap2-rev2-11'
-  f = cosmic_fengine.CosmicFengine('snap2-rev2-11')
+  # Instantiate a CosmicFengine instance, to communicate with
+  # the F-engine pipeline for the first antenna of a board with
+  # PCIe enumeration 0x3d, to be programmed with firmware 'firmware.fpg'
+  f = CosmicFengine('pcie3d', fpgfile=firmware.fpg, pipeline_id=0)
 
   # Program a board
-  f.program() # Load whatever firmware is in flash
-  # Wait 30 seconds for the board to reboot...
+  f.program() # Load firmware (if it not already running)
 
   # Initialize all the firmware blocks
   f.initialize(read_only=False)
@@ -149,6 +149,9 @@ See :numref:`control-interface` for a full software API description
   # Issue a reset and synchronization pulse
   f.sync.arm_sync()
   f.sync.sw_sync()
+
+  # Do, something, like plot autocorrelations for all polarizations/IFs
+  f.autocorr.plot_all_spectra()
 
 
 Block Descriptions
@@ -214,14 +217,90 @@ The PFB implements a 1 MHz channelizer, slicing the wideband DTS inputs into mul
 Autocorrelation (`autocorr`)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+The `autocorr` block calculates, prior to any requantization, the autocorrelation of each F-engine input,
+with a runtime-programmable accumulation length.
+
+Delay / Phase Tracking (`phase_rotate`)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The phase rotation block performs delay and phase tracking, in order to fringe-stop at the phase center of an observation.
+
+Bandpass Equalization (`eq`)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The `eq` block provides the ability to multiply spectra by a set of frequency dependent (but time-independent)
+real-valued coefficients. This allows the bandpass of each F-engine input to be flattened, and the overall power levels
+to be set appropriately for downstream requantization.
+
+Test Vector Insertion (`eqtvg`)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The `eqtvg` block provides the ability to replace data streams with a runtime-programmable test pattern, which
+may vary with frequency channel and input number, but is invariant over time.
+
+Cross-Correlation (`corr`)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The `corr` block provides the ability to correlate any pair of F-engine inputs (for a single antenna).
+Since F-engine inputs are different IFs and polariations of a common antenna, this block is mostly useful
+for debugging and verification, when used alongside the variou test vector insertion modes.
+
+Channel Selection (`chanreorder`)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The `chanreorder` block reorders channels within a spectra. Alongside the downstream packetization block,
+it can be used to dynamically define which frequency channels are transmitted from the F-engine.
+
+Packetizer (`packetizer`)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The `packetizer` module inserts application headers to the F-engine data streams,
+and configures the destinations to which F-engine packets are sent.
+
+100 GbE Outputs (`eths[]`)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The `eths` blocks encapsulate (multiple) 100GbE interfaces, and provide control for enabling and disabling Ethernet outputs,
+and packet transmission statistics.
 
 
 
 Output Data Format
 ==================
 
-To be documented
+F-Engine output data comprises a continuous stream of voltage samples, encapsulated in UDP packets.
+The format used is similar to that used at the ATA for 8-bit *Voltage Mode* observations, but with a larger number of time samples per packet.
 
+Each packet contains a data payload of up to 8192 bytes, made up of 32 time samples for up to 128 frequency channels of dual-polarization data:
+
+.. code-block:: C
+
+  // Number of time samples per packet
+  #define N_t 32
+  // Number of polarizations per packet
+  #define N_p 2
+
+  struct voltage_packet {
+    uint8_t version;
+    uint8_t type;
+    uint16_t n_chans;
+    uint16_t chan;
+    uint16_t feng_id
+    uint64_t timestamp;
+    complex8 data[n_chans, N_t, N_p] // 8-bit real + 8-bit imaginary
+  };
+
+The header entries are all encoded network-endian and should be interpretted as follows:
+  - ``version``; TODO: check how this is populated
+  - ``type``; *Packet type*: Bit [0] is 1 if the axes of data payload are in order [slowest to fastest] channel x time x polarization. This is currently the only supported mode. Bit [1] is 1 if the data payload comprises 8+8 bit complex integers. This is currently the only supported mode.
+  - ``n_chans``; *Number of Channels*: Indicates the number of frequency channels present in the payload of this data packet.
+  - ``chan``; *Channel number*: The index of the first channel present in this packet. For example, a channel number ``c`` implies the packet contains channels ``c`` to ``c + n_chans - 1``.
+  - ``feng_id``; *Antenna ID*: A runtime configurable ID which uniquely associates a packet with a particular SNAP board.
+  - ``timestamp``; *Sample number*: The index of the first time sample present in this packet. For example, a sample number :math:`s` implies the packet contains samples :math:`s` to :math:`s+15`. Sample number counts in units of spectra since the UNIX epoch, and can be referred to GPS time through knowledge of the system sampling rate and FFT length parameters.
+
+The data payload in each packet is determined by the number of frequency channels it contains.
+The maximum is 8192 bytes.
+If ``type & 2 == 1`` each byte of data should be interpretted as an 8-bit complex number (i.e. 8-bit real, 8-bit imaginary) with the most significant 8 bits of each byte representing the real part of the complex sample in signed 2's complement format, and the least significant 8 bits representing the imaginary part of the complex sample in 2's complement format.
 
 .. [1]
     See `<https://www.alpha-data.com/product/adm-pcie-9h7>`__
