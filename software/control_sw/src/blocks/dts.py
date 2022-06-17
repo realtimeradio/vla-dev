@@ -9,6 +9,27 @@ LANE_MAP = [8,9,6,7,10,11,1,0,4,5,2,3]
 _LOCK_TIMEOUT_SECS = 1
 
 class Dts(Block):
+    """
+    Instantiate a control interface for a DTS interface block.
+
+    :param host: CasperFpga interface for host.
+    :type host: casperfpga.CasperFpga
+
+    :param name: Name of block in Simulink hierarchy.
+    :type name: str
+
+    :param logger: Logger instance to which log messages should be emitted.
+    :type logger: logging.Logger
+
+    :param nlanes: Number of parallel DTS lanes used for this interface.
+    :type nlanes: int
+
+    :param lane_map: How to reorder DTS lanes to assemble data. A list with
+        ``nlanes`` entries, where entry ``i`` defines the physical lane which
+        should be considered to have index ``i``. This array is defined by the
+        physical connectivity of the FPGA.
+    :type lane_map: list of int 
+    """
     _REG_ADDRESS_CR = 0x0 # Control Register
     _REG_ADDRESS_PC = 0x1 # Parity count
     _REG_ADDRESS_SC = 0x2 # Scramble Code
@@ -16,9 +37,9 @@ class Dts(Block):
     _REG_ADDRESS_TM = 0x4 # Timing Register
 
     _WB_ADDR_META = 6
-    def __init__(self, fpga, name, nlanes=12, lane_map=LANE_MAP, logger=None):
-        super(Dts, self).__init__(fpga, name, logger)
-        self.fpga = fpga
+    def __init__(self, host, name, nlanes=12, lane_map=LANE_MAP, logger=None):
+        super(Dts, self).__init__(host, name, logger)
+        self.fpga = host
         self.nlanes = nlanes
         self.lane_map = lane_map
 
@@ -57,10 +78,16 @@ class Dts(Block):
         self.write_int('rst', val)
 
     def reset_stats(self):
+        """
+        Reset internal statistics counters
+        """
         self.write_int('stats_rst', 1)
         self.write_int('stats_rst', 0)
 
     def reset(self):
+        """
+        Reset underlying interface.
+        """
         self.set_reset(0)
         time.sleep(0.01)
         self.set_reset(1)
@@ -88,9 +115,16 @@ class Dts(Block):
         return self.read_uint('stats_ten_sec_count')
 
     def mute(self):
+        """
+        Internally disable data output.
+        """
         self._change_ctrl_reg_bits(0, 18, 1)
 
     def get_lane_ids(self):
+        """
+        Get the DTS lane IDs, as encoded in the
+        underlying data streams.
+        """
         x, _ = self.get_status()
         out = [0 for _ in range(self.nlanes)]
         for k,v in x.items():
@@ -100,6 +134,9 @@ class Dts(Block):
         return out
 
     def unmute(self):
+        """
+        Internally enable data output.
+        """
         self._change_ctrl_reg_bits(1, 18, 1)
 
     def _set_cs(self, chip):
@@ -112,9 +149,29 @@ class Dts(Block):
         return self._read_reg(self._WB_ADDR_META) & 0xff
 
     def get_lock_state(self):
+        """
+        Get the lock state of the DTS interface.
+        Returns a bit array, where bit ``i`` is 1 if lane ``i``
+        is locked, and ``0`` otherwise.
+        A lane is locked if the DTS receiver has correctly inferred
+        data frame edges from the data stream sync pattern.
+
+        :return locked: bit array
+        :rtype locked: int
+        """
         return (self._read_reg(self._WB_ADDR_META) >> 8) & (2**self.nlanes - 1)
 
     def get_gty_lock_state(self):
+        """
+        Get the lock state of the DTS's underlying transceivers.
+        Returns a bit array, where bit ``i`` is 1 if lane ``i``
+        is locked, and ``0`` otherwise.
+        A lane is locked if the transceiver IP is successfully recovering a clock
+        from the data stream.
+
+        :return locked: bit array
+        :rtype locked: int
+        """
         return (self._read_reg(self._WB_ADDR_META) >> (8+self.nlanes)) & (2**self.nlanes - 1)
 
     def advance_stream(self, stream):
@@ -318,6 +375,17 @@ class Dts(Block):
            print("%.4d" % dn, np.binary_repr(d & locked, width=12))
 
     def align_lanes(self, mux_factor=4, retries=0):
+        """
+        Align the multiple lanes of the DTS interface by
+        advancing/delaying streams so that their sync pulses
+        occur at the same FPGA clock cycle.
+
+        :param mux_factor: Ratio of FPGA clock to DTS 160-bit frame clock
+        :type mux_factor: int
+
+        :param retries: Number of retry attempts
+        :type retries: int
+        """
         self.reset_delays()
         locked = self.get_lock_state()
         if locked == 0:
