@@ -3,7 +3,7 @@ To build documentation:
  - In HTML form
    
 ```
-make latexpdf
+make html
 ```
 
 HTML pages will be generated in `build/html`
