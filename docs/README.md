@@ -14,4 +14,4 @@ HTML pages will be generated in `build/html`
 make latexpdf
 ```
 
-PDF will be generated in build/latex/cosmic-vlafpga.pdf
+PDF will be generated in `build/latex/cosmic-vlafpga.pdf`
