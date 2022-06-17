@@ -26,18 +26,18 @@ a single ADM-PCIe-9H7 board running LWA's F-Engine firmware. An example is below
 .. code-block:: python
 
   # Import the ADM-PCIe-9H7 F-Engine library
-  from cosmic_f import cosmic_fengine
+  from cosmic_f import CosmicFengine
 
-  # Instantiate a CosmicFengine instance to a board with
-  f = cosmic_fengine.CosmicFengine('snap2-rev2-11')
+  # Instantiate a CosmicFengine instance, to communicate with
+  # the F-engine pipeline for the first antenna of a board with
+  # PCIe enumeration 0x3d, to be programmed with firmware 'firmware.fpg'
+  f = CosmicFengine('pcie3d', fpgfile=firmware.fpg, pipeline_id=0)
 
-  # Program a board (if it is not already programmed)
-  # and initialize all the firmware blocks
-  if not f.fpga.is_programmed():
-    f.program() # Load whatever firmware is in flash
-    # Wait 30 seconds for the board to reboot...
-    # Initialize firmware blocks, including DTS link training
-    f.initialize(read_only=False)
+  # Program a board
+  f.program() # Load firmware (if it not already running)
+
+  # Initialize all the firmware blocks
+  f.initialize(read_only=False)
 
   # Blocks are available as items in the CosmicFengine `blocks`
   # dictionary, or can be accessed directly as attributes
@@ -46,12 +46,12 @@ a single ADM-PCIe-9H7 board running LWA's F-Engine firmware. An example is below
   # Print available block names
   print(sorted(f.blocks.keys()))
   # Returns:
-  # ['adc', 'autocorr', 'corr', 'delay', 'eq', 'eq_tvg', 'eth',
+  # ['dts', 'autocorr', 'corr', 'delay', 'eq', 'eq_tvg', 'eth',
   # 'fpga', 'input', 'noise', 'packetizer', 'pfb', 'reorder', 'sync']
 
-  # Grab some ADC data from the ADC card(s) on FMC 1
-  adc_data = f.adc.get_snapshot_interleaved(1, signed=True)
-  print(adc_data.shape) # returns (32 [channels], 512 [time samples]
+  # Grab some correlation data from the two pols of the first IF
+  corr_data = f.corr.get_new_corr(0, 1)
+  # ...
 
 Details of the methods provided by individual blocks are given in the next
 section.
@@ -85,16 +85,6 @@ whether the FPGA is programmed with an LWA F-Engine firmware design.
   :no-show-inheritance:
   :members:
 
-Power Monitoring
-++++++++++++++++
-
-The ``PowerMon`` interface allows gathering of power supply statistics such
-as voltage and currnt levels.
-
-.. autoclass:: cosmic_f.blocks.powermon.PowerMon
-  :no-show-inheritance:
-  :members:
-
 Timing Control
 ++++++++++++++
 
@@ -107,13 +97,13 @@ multi-ADM-PCIe-9H7 timing distribution system.
 
 .. _control-adc:
 
-ADC Control
+DTS Control
 +++++++++++
 
-The ``Adc`` control interface allows link training (aka "calibration") of
-the ADC->FPGA data link.
+The ``Dts`` control interface allows link training of
+the DTS->FPGA data link.
 
-.. autoclass:: cosmic_f.blocks.adc.Adc
+.. autoclass:: cosmic_f.blocks.dts.Dts
   :no-show-inheritance:
   :members:
 
@@ -131,6 +121,12 @@ Noise Generator Control
   :no-show-inheritance:
   :members:
 
+Sine Generator Control
+++++++++++++++++++++++
+
+.. autoclass:: cosmic_f.blocks.sinegen.SineGen
+  :no-show-inheritance:
+  :members:
 
 Delay Control
 +++++++++++++

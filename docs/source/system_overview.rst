@@ -189,7 +189,7 @@ The input block provides bit statistics (mean, RMS, histograms) for F-engine inp
 It also contains a multiplexor which allows F-engine inputs to be replaces with
 either zeros, or a signal from an upstream `noise` block.
 
-Sine-wave Injection (`sine_tvg`)
+Sine-wave Injection (`sinegen`)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The Sine-wave injection block allows a software-defined sine wave to be added to
