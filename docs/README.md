@@ -1,6 +1,6 @@
 To build documentation:
 
- 1. In HTML form
+ - In HTML form
    
 ```
 make latexpdf
@@ -8,7 +8,7 @@ make latexpdf
 
 HTML pages will be generated in `build/html`
 
- 2. In PDF form
+ - In PDF form
 
 ```
 make latexpdf
