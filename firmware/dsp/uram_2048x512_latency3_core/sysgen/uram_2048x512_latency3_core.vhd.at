@@ -1,0 +1,27 @@
+{
+  'Line_125' => {
+    'CodeInstance' => 'uram_2048x512_latency3_core_default_clock_driver',
+    'Instance' => 'uram_2048x512_latency3_core_default_clock_driver',
+    'SimulinkInstance' => ''
+  },
+  'Line_133' => {
+    'CodeInstance' => 'uram_2048x512_latency3_core_struct',
+    'Instance' => 'uram_2048x512_latency3_core_struct',
+    'SimulinkInstance' => 'uram_2048x512_latency3_core'
+  },
+  'Line_31' => {
+    'CodeInstance' => 'uram_2048x512_latency3_core_struct/convert',
+    'Instance' => 'convert',
+    'SimulinkInstance' => 'uram_2048x512_latency3_core/Convert'
+  },
+  'Line_52' => {
+    'CodeInstance' => 'uram_2048x512_latency3_core_struct/bram0',
+    'Instance' => 'bram0',
+    'SimulinkInstance' => 'uram_2048x512_latency3_core/bram0'
+  },
+  'Line_92' => {
+    'CodeInstance' => 'uram_2048x512_latency3_core_default_clock_driver/clockdriver',
+    'Instance' => 'clockdriver',
+    'SimulinkInstance' => ''
+  }
+}
