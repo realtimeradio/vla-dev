@@ -620,7 +620,7 @@ class CosmicFengine():
         if program or initialize:
             if dts_lane_map is not None:
                 self.dts.lane_map = dts_lane_map
-            self.initialize(read_only=False)
+            self.initialize(read_only=False, allow_unlocked_dts=test_vectors)
             self.logger.info('Updating telescope time')
             self.sync.update_internal_time(offset_ns = sync_offset_ns)
 
