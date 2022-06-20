@@ -98,7 +98,7 @@ class EqTvg(Block):
         for input in range(self.n_inputs):
             self.write_input_tvg(input, ramp)
 
-    def read_input_tvg(self, input, makecomplex=False):
+    def read_input_tvg(self, input, makecomplex=False, return_list=False):
         """
         Read the test vector loaded to an ADC input.
         
@@ -127,7 +127,7 @@ class EqTvg(Block):
             tvg_i = tvg.view(dtype=dtype.lower()) % (2**ri_width)
             tvg_i[tvg_i > (2**(ri_width-1))] -= (2**ri_width)
             tvg = tvg_r + 1j*tvg_i
-        return tvg
+        return tvg if not return_list else list(map(int, tvg))
 
     def get_status(self):
         """
