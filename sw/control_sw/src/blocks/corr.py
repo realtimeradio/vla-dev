@@ -80,7 +80,7 @@ class Corr(Block):
             spec[i::p].imag = d[1::2]
         return spec
     
-    def get_new_corr(self, signal1, signal2, flush_vacc=True):
+    def get_new_corr(self, signal1, signal2, flush_vacc=True, return_list=False):
         """
         Get a new correlation.
         Data are returned with summing factor divided out, and normalized to correspond to an input
@@ -108,7 +108,7 @@ class Corr(Block):
         self._wait_for_acc()
         acc_len = self.get_acc_len()
         spec = self._read_bram()/float(acc_len*self._chan_sum_factor)/(2**(2*self._input_binary_point))
-        return spec
+        return {"real": np.real(spec).tolist(), "imag":np.imag(spec).tolist()} if return_list else spec
 
     def plot_all_spectra(self, db=False, show=True):
         """
