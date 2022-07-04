@@ -83,7 +83,7 @@ class SineGen(Block):
             v = 0
         else:
             v = n+1
-        self.change_reg_bits(ctrl_reg, v, 2*output, 2)
+        self.change_reg_bits(ctrl_reg, v, 4*output, width=2)
 
     def get_output_assignment(self, output):
         """
