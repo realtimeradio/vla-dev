@@ -14,6 +14,7 @@ from .blocks import block
 from .blocks import fpga
 from .blocks import sync
 from .blocks import delay
+from .blocks import lo
 from .blocks import input
 from .blocks import noisegen
 from .blocks import sinegen
@@ -184,6 +185,10 @@ class CosmicFengine():
                 'pipeline%d_delay' % self.pipeline_id,
                 n_streams = 4)
 
+        self.lo       = lo.Lo(self._cfpga,
+                'pipeline%d_lo' % self.pipeline_id,
+                n_streams = 4)
+
         self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id, nchan=2*NCHANS)
 
         #: Control interface for the Autocorrelation block
@@ -242,6 +247,7 @@ class CosmicFengine():
             'fpga'        : self.fpga,
             'sync'        : self.sync,
             'delay'       : self.delay,
+            'lo'          : self.lo,
             'noisegen'    : self.noisegen,
             'sinegen'     : self.sinegen,
             'input'       : self.input,
