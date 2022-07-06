@@ -187,7 +187,7 @@ class CosmicFengine():
 
         self.lo       = lo.Lo(self._cfpga,
                 'pipeline%d_lo' % self.pipeline_id,
-                n_streams = 4)
+                n_streams = 4, n_par_samples=8, samplehz=2048)
 
         self.pfb         = pfb.Pfb(self._cfpga, 'pipeline%d_pfb' % self.pipeline_id, nchan=2*NCHANS)
 
