@@ -105,7 +105,7 @@ class Lo(Block):
         :param phase_offset: LO phase offset to load
         :type phase_offset: float
         """
-        phase_step = phase_offset * 8
+        phase_step = phase_offset * self.n_par_samples
         assert phase_step < self.MAX_PHASE_STEP, f"""The supplied phase offset corresponds to a phase_step = {phase_step} > {self.MAX_PHASE_STEP}"""
         self.set_phase_offset(stream, phase_offset)
         self.set_phase_step(stream, phase_step)
