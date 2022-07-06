@@ -30,6 +30,7 @@ class Lo(Block):
     MIN_PHASE_STEP = 0
     MIN_PHASE_OFFSET = 0
     _BP = 21
+    _BW = 24
 
     def __init__(self, host, name, n_streams=4, n_par_samples=8, samplehz=2048, logger=None):
         super(Lo, self).__init__(host, name, logger)
@@ -120,7 +121,7 @@ class Lo(Block):
         :param frequency_shift: The frequency shift to apply in MHz.
         :type frequency_shift: float
         """
-        phase_offset = 2*np.pi*(frequency_shift/self.samplehz)
+        phase_offset = (2**(self._BW-self._BP))*(frequency_shift/self.samplehz)
         assert phase_offset <= self.samplehz, f"""Specified frequency_shift {frequency_shift}MHz is larger than the ADC samplehz {self.samplehz}MHz."""
         self.set_phase(stream, phase_offset)
 
