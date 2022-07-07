@@ -119,6 +119,12 @@ class CosmicFengine():
         """
         return self._cfpga.is_connected()
 
+    def list_blocks(self):
+        """
+        :return: A list of block names which may be controlled
+        """
+        return self.blocks.keys()
+
     def _initialize_blocks(self):
         """
         Initialize firmware blocks, populating the ``blocks`` attribute.
