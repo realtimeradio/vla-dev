@@ -183,9 +183,9 @@ class AutoCorr(Block):
             with this kernel size. The kernet size should be odd.
         :type filter_ksize: int
 
-        :return: Float32 array of dimensions [POLARIZATION, FREQUENCY CHANNEL]
+        :return: Float32 2D list of dimensions [POLARIZATION, FREQUENCY CHANNEL]
             containing autocorrelations with accumulation length divided out.
-        :rtype: numpy.array
+        :rtype: list
 
         """
 
@@ -211,7 +211,7 @@ class AutoCorr(Block):
             for signal in range(nsignals):
                 spec[signal] = medfilt(spec[signal], kernel_size=filter_ksize)
 
-        return spec
+        return spec.tolist()
 
     def plot_all_spectra(self, db=True, show=True, filter_ksize=None):
         """
@@ -237,9 +237,9 @@ class AutoCorr(Block):
         if self._use_mux:
             for i in range(self._n_cores):
                 specs[i*self.n_signals_per_block:(i+1)*self.n_signals_per_block] = \
-                    self.get_new_spectra(i, filter_ksize=filter_ksize)
+                    np.array(self.get_new_spectra(i, filter_ksize=filter_ksize))
         else:
-            specs = self.get_new_spectra(filter_ksize=filter_ksize)
+            specs = np.array(self.get_new_spectra(filter_ksize=filter_ksize))
         f, ax = plt.subplots(1,1)
         if db:
             ax.set_ylabel('Power [dB]')

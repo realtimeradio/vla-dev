@@ -87,18 +87,18 @@ class Eq(Block):
         :param stream: ADC stream index to query.
         :type stream: int
 
-        :return: (coeffs, binary_point). ``coeffs`` is an array of
+        :return: (coeffs, binary_point). ``coeffs`` is an list of
             ``self.n_coeffs`` integer coefficients currently being applied.
             ``binary_point`` is the position of the binary point wy which these
             integers are scaled on the FPGA.
-        :rtype: (numpy.ndarray, int)
+        :rtype: (list, int)
 
         """
         coeff_reg = 'pol%d_coeffs' % (stream // self._N_SUBSTREAM)
         stream_sub_index = stream % self._N_SUBSTREAM
         coeffs_str = self.read(coeff_reg, self._stream_size, offset= self._stream_size * stream_sub_index)
         coeffs = np.array(struct.unpack('>%d%s' % (self.n_coeffs, self._FORMAT), coeffs_str))
-        return coeffs, self._BP
+        return coeffs.tolist(), self._BP
 
     def clip_count(self):
         """
