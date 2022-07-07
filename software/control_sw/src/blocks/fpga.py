@@ -26,9 +26,10 @@ class Fpga(Block):
         # Top-level F-engine sees all registers
         super(Fpga, self).__init__(host, name, logger)
 
-        # Try and get the canonical name of the host
-        # to use as a serial number
-        self.serial = None
+        try:
+            self.server_hostname = socket.gethostname()
+        except:
+            self.server_hostname = ''
         self.sysmon = casperfpga.sysmon.Sysmon(self.host)
 
     def get_fpga_clock(self):
@@ -104,9 +105,6 @@ class Fpga(Block):
 
             - timestamp (str) : The current time, as an ISO format string.
 
-            - serial (str) : The serial number / identifier for this board.
-              Flagged with a warning if no serial is available.
-
             - host (str) : The host name of this board.
 
             - sw_version (str) : The version string of the control software
@@ -158,8 +156,7 @@ class Fpga(Block):
         flags = {}
         stats['programmed'] = self.is_programmed()
         stats['timestamp'] = datetime.datetime.now().isoformat()
-        stats['serial'] = self.serial
-        stats['host'] = self.host.host
+        stats['host'] = '%s:%s' % (self.server_hostname, self.host.host)
         stats['sw_version'] = __version__
         if stats['programmed']:
             stats['fw_version'] = self.get_firmware_version()
@@ -176,8 +173,6 @@ class Fpga(Block):
             flags['programmed'] = FENG_WARNING
         if stats['sw_version'].endswith('dirty'):
             flags['sw_version'] = FENG_WARNING
-        if stats['serial'] is None:
-            flags['serial'] = FENG_WARNING
         if 'vccaux' in stats:
             if stats['vccaux'] < 1.746 or stats['vccaux'] > 1.854:
                 flags['vccaux'] = FENG_WARNING
