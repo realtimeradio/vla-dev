@@ -5,10 +5,32 @@ from casperfpga import LocalPcieTransport
 from remoteobjects.server import addRemoteObjectResources, ObjectRegistry
 import argparse
 from cosmic_f import cosmic_fengine
+import numpy as np
+import json
 
 PCIE_XDMA_DICT = None
 
+class CustomJsonEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, complex):
+            return (obj.real, obj.imag)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super().default(obj)
+
+class FlaskConfig(object):
+    RESTFUL_JSON = {}
+
+    @staticmethod
+    def init_app(app):
+        app.json_encoder = CustomJsonEncoder
+        app.config['RESTFUL_JSON']['cls'] = app.json_encoder
+
 app = Flask(__name__)
+app.config.from_object(FlaskConfig)
+FlaskConfig.init_app(app)
+
 flask_api, object_registry = addRemoteObjectResources(
     app,
     [
