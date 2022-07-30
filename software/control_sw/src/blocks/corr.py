@@ -97,9 +97,12 @@ class Corr(Block):
             first time a new signal pair is read.
         :type flush_vacc: bool
 
+        :param return_list: If True, return a dict(str:list, str:list) else numpy.array
+        :type return_list: Bool
+
         :return: Complex-valued cross-correlation spectra of `signal1` and `signal2` with
             accumulation length and frequency summing factor divided out.
-        :rtype: numpy.array
+        :rtype: numpy.array or dict(str:list, str:list)
 
         """
         self._set_input(signal1,signal2)

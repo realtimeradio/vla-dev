@@ -79,7 +79,7 @@ class Eq(Block):
         plt.legend()
         plt.show()
 
-    def get_coeffs(self, stream):
+    def get_coeffs(self, stream, return_list=False):
         """
         Get the coefficients currently loaded.
         Reads the actual coefficients from the board.
@@ -93,12 +93,18 @@ class Eq(Block):
             integers are scaled on the FPGA.
         :rtype: (list, int)
 
+        :param return_list: If True, return a list else numpy.array
+        :type return_list: Bool
+
         """
         coeff_reg = 'pol%d_coeffs' % (stream // self._N_SUBSTREAM)
         stream_sub_index = stream % self._N_SUBSTREAM
         coeffs_str = self.read(coeff_reg, self._stream_size, offset= self._stream_size * stream_sub_index)
         coeffs = np.array(struct.unpack('>%d%s' % (self.n_coeffs, self._FORMAT), coeffs_str))
-        return coeffs.tolist(), self._BP
+        if return_list:
+            return coeffs.tolist(), self._BP
+        else:
+            return coeffs, self._BP
 
     def clip_count(self):
         """
