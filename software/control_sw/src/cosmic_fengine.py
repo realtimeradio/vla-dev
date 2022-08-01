@@ -39,6 +39,16 @@ FIRMWARE_TYPE_3BIT = 3
 DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
 DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
 NTIME_PACKET = 32
+BIT8_LO_INDEX_MAP = {
+    0: 'A',
+    1: 'C',
+    2: 'B',
+    3: 'D',
+    'A': 0,
+    'C': 1,
+    'B': 2,
+    'D': 3,
+}
 
 class CosmicFengine():
     """
@@ -551,7 +561,8 @@ class CosmicFengine():
                    sync=True, sw_sync=False, enable_eth=True,
                    chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
-                   dests=[], dts_lane_map=None, fpgfile=None, sync_offset_ns=0.0):
+                   dests=[], dts_lane_map=None, fpgfile=None, sync_offset_ns=0.0,
+                   lo_fshift_map = {'A':0.0,'B':0.0,'C':0.0,'D':0.0}):
         """
         Completely configure an F-engine from scratch.
 
@@ -624,6 +635,9 @@ class CosmicFengine():
         :param sync_offset_ns: Nanoseconds offset to add to the time loaded into the
             internal telescope time counter.
         :type sync_offset_ns: float
+
+        :param lo_fshift_map: lo_name to lo_offshift map to apply.
+        :type lo_fshift_map: Dict
         """
         if program:
             self.program(fpgfile)
@@ -642,6 +656,10 @@ class CosmicFengine():
         else:
             self.logger.info('Disabling EQ TVGs...')
             self.eqtvg.tvg_disable()
+        
+        #first, load lo_offshifts, assuming those received are in hz:
+        for lo_name, offshift in lo_fshift_map.items():
+            self.lo.set_lo_frequency_shift(BIT8_LO_INDEX_MAP[lo_name], abs(offshift)*1E-6)
 
         if sync:
             self.logger.info("Arming sync generators")
@@ -652,6 +670,8 @@ class CosmicFengine():
             if sw_sync:
                 self.logger.info("Issuing software sync")
                 self.sync.sw_sync()
+        else:
+            self.logger.warn("Absence of sync means lo offshifts will not load...")
 
         for sn, source_ip in enumerate(source_ips):
             if sn >= self.neths:
