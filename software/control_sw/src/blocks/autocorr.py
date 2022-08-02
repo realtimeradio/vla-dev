@@ -159,7 +159,7 @@ class AutoCorr(Block):
         self.write_int('trig', 1)
         self.write_int('trig', 0)
     
-    def get_new_spectra(self, signal_block=0, flush_vacc='auto', filter_ksize=None):
+    def get_new_spectra(self, signal_block=0, flush_vacc='auto', filter_ksize=None, return_list=False):
         """
         Get a new average power spectra.
 
@@ -182,6 +182,9 @@ class AutoCorr(Block):
         :param filter_ksize: If not None, apply a spectral median filter
             with this kernel size. The kernet size should be odd.
         :type filter_ksize: int
+
+        :param return_list: If True, return a list else numpy.array
+        :type return_list: Bool
 
         :return: Float32 2D list of dimensions [POLARIZATION, FREQUENCY CHANNEL]
             containing autocorrelations with accumulation length divided out.
@@ -211,7 +214,10 @@ class AutoCorr(Block):
             for signal in range(nsignals):
                 spec[signal] = medfilt(spec[signal], kernel_size=filter_ksize)
 
-        return spec.tolist()
+        if return_list:
+            return spec.tolist()
+        else:
+            return spec
 
     def plot_all_spectra(self, db=True, show=True, filter_ksize=None):
         """

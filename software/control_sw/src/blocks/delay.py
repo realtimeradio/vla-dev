@@ -41,7 +41,7 @@ class Delay(Block):
             self.max_delay = self.DEFAULT_MAX_DELAY
         return self.max_delay
 
-    def set_delay(self, stream, delay):
+    def set_delay(self, stream, delay, force=False):
         """
         Set the delay for a given input stream.
 
@@ -68,13 +68,15 @@ class Delay(Block):
         self._debug('Setting delay of stream %d to %d' % (stream, delay))
         delay_reg  = 'delay%d_delay' % (stream)
         self.write_int(delay_reg, delay)
+        if force:
+            self.force_load()
 
     def force_load(self):
         """
         Force immediate load of all delays.
         """
-        self.write_int('ctrl', 0b11)
-        self.write_int('ctrl', 0)
+        self.change_reg_bits('ctrl',1, 0)
+        self.change_reg_bits('ctrl',0, 0)
 
     def get_delay(self, stream):
         """

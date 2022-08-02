@@ -29,8 +29,8 @@ class Lo(Block):
     MAX_PHASE_OFFSET = 8
     MIN_PHASE_STEP = 0
     MIN_PHASE_OFFSET = 0
-    _BP = 21
-    _BW = 24
+    _BP = 29
+    _BW = 32
 
     def __init__(self, host, name, n_streams=4, n_par_samples=8, samplehz=2048, logger=None):
         super(Lo, self).__init__(host, name, logger)
@@ -40,7 +40,7 @@ class Lo(Block):
 
     def set_phase_step(self, stream, phase_step):
         """
-        Set the phase offset for a given stream.
+        Set the phase step for a given stream.
 
         :param stream: ADC stream index to which the phase should be applied.
         :type stream: int
@@ -65,6 +65,16 @@ class Lo(Block):
         phase_step_reg = f"""{stream}_phase_step"""
         phase_step *= 2**self._BP
         self.write_int(phase_step_reg, int(phase_step))
+
+    def get_phase_step(self, stream):
+        """
+        Retrieve the programmed phase step for a given stream.
+
+        :param stream: ADC stream index to which the phase should be applied.
+        :type stream: int
+        """
+        phase_step_reg = f"""{stream}_phase_step"""
+        return self.read_int(phase_step_reg)
 
     def set_phase_offset(self, stream, phase_offset):
         """
@@ -93,6 +103,16 @@ class Lo(Block):
         phase_offset_reg = f"""{stream}_phase_offset"""
         phase_offset *= 2**self._BP
         self.write_int(phase_offset_reg, int(phase_offset))
+
+    def get_phase_offset(self, stream):
+        """
+        Retrieve the programmed phase offset for a given stream.
+
+        :param stream: ADC stream index to which the phase should be applied.
+        :type stream: int
+        """
+        phase_offset_reg = f"""{stream}_phase_offset"""
+        return self.read_int(phase_offset_reg)
 
     def set_phase(self, stream, phase_offset):
         """
@@ -124,6 +144,19 @@ class Lo(Block):
         phase_offset = (2**(self._BW-self._BP))*(frequency_shift/self.samplehz)
         assert phase_offset <= self.samplehz, f"""Specified frequency_shift {frequency_shift}MHz is larger than the ADC samplehz {self.samplehz}MHz."""
         self.set_phase(stream, phase_offset)
+
+    def get_lo_frequency_shift(self, stream):
+        """
+        This function retrieves the phase offset value 
+        and returns a tuple containing it and the scaling factor to multiply with
+        to turn it to a MHz frequency.
+
+        :param stream: ADC stream index to which the phase should be applied.
+        :type stream: int
+        """
+        offset = self.get_phase_offset(stream)
+        scale = self.samplehz/(2**self._BW)
+        return (offset, scale)
 
     def initialize(self, read_only=False):
         """
