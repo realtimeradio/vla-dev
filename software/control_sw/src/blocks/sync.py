@@ -346,14 +346,19 @@ class Sync(Block):
             self.wait_for_sync()
             now = time.time()
             now_clocks = int(now * fs_hz)
-            next_sync_clocks = (int(round((now_clocks / sync_period))) + 1) * sync_period
-            next_sync = next_sync_clocks / fs_hz
-            delay = next_sync - time.time()
-            if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
-                self._error("Took too long to configure telescope time register")
-            next_sync_clocks = int(next_sync_clocks + (offset_ns*1e-9 / fs_hz))
+            next_sync_clocks = int(round((now_clocks / sync_period))) + 1 
             if next_sync_clocks % sync_clock_factor == 0:
                 break
+            else:
+                self._info("Next sync_clocks %d %% %d = %d != 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
+        self._info("Next sync_clocks %d %% %d = %d == 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
+
+        next_sync_clocks *= sync_period
+        next_sync = next_sync_clocks / fs_hz
+        delay = next_sync - time.time()
+        if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
+            self._error("Took too long to configure telescope time register")
+        next_sync_clocks = int(next_sync_clocks + (offset_ns*1e-9 / fs_hz))
 
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
