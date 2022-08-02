@@ -292,7 +292,7 @@ class Sync(Block):
         tt = (self.read_uint('tt_sync_msb') << 32) + self.read_uint('tt_sync_lsb')
         return tt
 
-    def update_internal_time(self, fs_hz=None, offset_ns=0.0):
+    def update_internal_time(self, fs_hz=None, offset_ns=0.0, sync_clock_factor=1):
         """
         Arm sync trigger receivers,
         having loaded an appropriate telescope time.
@@ -342,15 +342,19 @@ class Sync(Block):
         
         # We assume that the master TT is tracking clocks since unix epoch.
         # Syncs should come every `sync_period` ADC clocks
-        self.wait_for_sync()
-        now = time.time()
-        now_clocks = int(now * fs_hz)
-        next_sync_clocks = (int(round((now_clocks / sync_period))) + 1) * sync_period
-        next_sync = next_sync_clocks / fs_hz
-        delay = next_sync - time.time()
-        if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
-            self._error("Took too long to configure telescope time register")
-        next_sync_clocks = int(next_sync_clocks + (offset_ns*1e-9 / fs_hz))
+        while True: # ensure sync value is a multiple of sync_clock_factor
+            self.wait_for_sync()
+            now = time.time()
+            now_clocks = int(now * fs_hz)
+            next_sync_clocks = (int(round((now_clocks / sync_period))) + 1) * sync_period
+            next_sync = next_sync_clocks / fs_hz
+            delay = next_sync - time.time()
+            if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
+                self._error("Took too long to configure telescope time register")
+            next_sync_clocks = int(next_sync_clocks + (offset_ns*1e-9 / fs_hz))
+            if next_sync_clocks % sync_clock_factor == 0:
+                break
+
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
         spare = next_sync - loaded_time

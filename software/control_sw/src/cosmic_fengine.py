@@ -647,7 +647,7 @@ class CosmicFengine():
                 self.dts.lane_map = dts_lane_map
             self.initialize(read_only=False, allow_unlocked_dts=test_vectors)
             self.logger.info('Updating telescope time')
-            self.sync.update_internal_time(offset_ns = sync_offset_ns)
+            self.sync.update_internal_time(offset_ns = sync_offset_ns, sync_clock_factor = NTIME_PACKET)
 
         if test_vectors:
             self.logger.info('Enabling EQ TVGs...')
