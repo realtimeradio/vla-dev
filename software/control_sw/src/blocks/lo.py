@@ -29,8 +29,8 @@ class Lo(Block):
     MAX_PHASE_OFFSET = 8
     MIN_PHASE_STEP = 0
     MIN_PHASE_OFFSET = 0
-    _BP = 21
-    _BW = 24
+    _BP = 29
+    _BW = 32
 
     def __init__(self, host, name, n_streams=4, n_par_samples=8, samplehz=2048, logger=None):
         super(Lo, self).__init__(host, name, logger)
