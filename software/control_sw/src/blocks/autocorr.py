@@ -62,7 +62,7 @@ class AutoCorr(Block):
                 ):
         super(AutoCorr, self).__init__(host, name, logger)
         self.n_chans = n_chans
-        self._acc_len = acc_len
+        self._default_acc_len = acc_len
         self.n_signals = n_signals
         self._n_parallel_streams = n_parallel_streams
         self._n_cores = n_cores
@@ -315,8 +315,7 @@ class AutoCorr(Block):
         :return: Current accumulation length
         :rtype: int
         """
-        self._acc_len = self.read_int('acc_len')
-        return self._acc_len
+        return self.read_int('acc_len')
 
     def set_acc_len(self, acc_len):
         """
@@ -326,8 +325,7 @@ class AutoCorr(Block):
         :type acc_len: int
         """
         assert isinstance(acc_len, int), "Cannot set accumulation length to type %r" % type(acc_len)
-        self._acc_len = acc_len
-        self.write_int('acc_len',acc_len)
+        self.write_int('acc_len', acc_len)
 
     def get_status(self):
         """
@@ -361,4 +359,4 @@ class AutoCorr(Block):
         if read_only:
             self.get_acc_len()
         else:
-            self.set_acc_len(self._acc_len)
+            self.set_acc_len(self._default_acc_len)
