@@ -132,16 +132,16 @@ class Lo(Block):
 
     def set_lo_frequency_shift(self, stream, frequency_shift):
         """
-        This function performs the translation from a frequency shift specified in MHz to 
+        This function performs the translation from a frequency shift specified in Hz to 
         the required phase_offset and phase_step values.
 
         :param stream: ADC stream index to which the phase should be applied.
         :type stream: int
 
-        :param frequency_shift: The frequency shift to apply in MHz.
+        :param frequency_shift: The frequency shift to apply in Hz.
         :type frequency_shift: float
         """
-        phase_offset = (2**(self._BW-self._BP))*(frequency_shift/self.samplehz)
+        phase_offset = (2**(self._BW-self._BP))*(frequency_shift/(self.samplehz*1E6))
         assert phase_offset <= self.samplehz, f"""Specified frequency_shift {frequency_shift}MHz is larger than the ADC samplehz {self.samplehz}MHz."""
         self.set_phase(stream, phase_offset)
 
@@ -149,13 +149,13 @@ class Lo(Block):
         """
         This function retrieves the phase offset value 
         and returns a tuple containing it and the scaling factor to multiply with
-        to turn it to a MHz frequency.
+        to turn it to a Hz frequency.
 
         :param stream: ADC stream index to which the phase should be applied.
         :type stream: int
         """
         offset = self.get_phase_offset(stream)
-        scale = self.samplehz/(2**self._BW)
+        scale = (self.samplehz*1E6)/(2**self._BW)
         return (offset, scale)
 
     def initialize(self, read_only=False):
