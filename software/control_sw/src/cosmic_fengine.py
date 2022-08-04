@@ -659,7 +659,7 @@ class CosmicFengine():
         
         #first, load lo_offshifts, assuming those received are in hz:
         for lo_name, offshift in lo_fshift_map.items():
-            self.lo.set_lo_frequency_shift(BIT8_LO_INDEX_MAP[lo_name], offshift*1E-6)
+            self.lo.set_lo_frequency_shift(BIT8_LO_INDEX_MAP[lo_name], offshift*1E3)
 
         if sync:
             self.logger.info("Arming sync generators")
