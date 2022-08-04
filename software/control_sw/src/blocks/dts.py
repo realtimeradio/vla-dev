@@ -5,7 +5,8 @@ import numpy as np
 from .block import Block
 from cosmic_f.error_levels import *
 
-LANE_MAP = [8,9,6,7,10,11,1,0,4,5,2,3]
+LANE_MAP_0 = [0,1,3,7,6,8,2,4,5,9,11,10]
+LANE_MAP_1 = [4,5,7,3,2,8,6,0,1,9,11,10]
 _LOCK_TIMEOUT_SECS = 1
 
 class Dts(Block):
@@ -37,7 +38,7 @@ class Dts(Block):
     _REG_ADDRESS_TM = 0x4 # Timing Register
 
     _WB_ADDR_META = 6
-    def __init__(self, host, name, nlanes=12, lane_map=LANE_MAP, logger=None):
+    def __init__(self, host, name, nlanes=12, lane_map=LANE_MAP_0, logger=None):
         super(Dts, self).__init__(host, name, logger)
         self.fpga = host
         self.nlanes = nlanes
