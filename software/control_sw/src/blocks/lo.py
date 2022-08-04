@@ -25,12 +25,12 @@ class Lo(Block):
     :type samplehz: float
 
     """
-    MAX_PHASE_STEP = 8
-    MAX_PHASE_OFFSET = 8
-    MIN_PHASE_STEP = 0
-    MIN_PHASE_OFFSET = 0
     _BP = 29
     _BW = 32
+    MAX_PHASE_STEP = (2**_BW)//2 -1 
+    MAX_PHASE_OFFSET = (2**_BW)//2 -1 
+    MIN_PHASE_STEP = -(2**_BW)//2
+    MIN_PHASE_OFFSET = -(2**_BW)//2
 
     def __init__(self, host, name, n_streams=4, n_par_samples=8, samplehz=2048, logger=None):
         super(Lo, self).__init__(host, name, logger)
