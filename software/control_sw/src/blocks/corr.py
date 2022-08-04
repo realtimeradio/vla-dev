@@ -97,7 +97,8 @@ class Corr(Block):
             first time a new signal pair is read.
         :type flush_vacc: bool
 
-        :param return_list: If True, return a dict(str:list, str:list) else numpy.array
+        :param return_list: If True, return data as a dictionary of lists, keyed by
+            'real', and 'imag'. Else, return a numpy array of complex data.
         :type return_list: Bool
 
         :return: Complex-valued cross-correlation spectra of `signal1` and `signal2` with
