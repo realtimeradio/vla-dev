@@ -28,7 +28,7 @@ class CustomJsonDecoder(json.JSONDecoder):
                 memfile = io.BytesIO()
                 memfile.write(rv['value'].encode('latin-1'))
                 memfile.seek(0)
-                return {'value': np.load(memfile)}
+                rv['value'] = np.load(memfile)
             except:
                 pass
 
@@ -68,14 +68,14 @@ class CosmicFengine():
                     definition_dict,
                     delete_remote_on_del=False,
                     allowed_upload_extension_regex=r'\.fpg|\.yaml',
-                    attribute_depth_allowance=attribute_depth_allowance,
-                    jsonEncoder=CustomJsonEncoder,
-                    jsonDecoder=CustomJsonDecoder,
+                    attribute_depth_allowance=attribute_depth_allowance
             )
             CosmicFengineRemote_cldef = definition_dict['CosmicFengineRemote']
             __COSMIC_FENGINE_REMOTE__ = CosmicFengineRemote_cldef
 
         return CosmicFengineRemote_cldef(
             remote_object_id=f'{host}_{pipeline_id}',
-            server_uri=remote_uri
+            server_uri=remote_uri,
+            jsonEncoder=CustomJsonEncoder,
+            jsonDecoder=CustomJsonDecoder,
         )
