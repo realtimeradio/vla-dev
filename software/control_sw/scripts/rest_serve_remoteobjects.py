@@ -5,7 +5,7 @@ from casperfpga import LocalPcieTransport
 from remoteobjects.server import addRemoteObjectResources
 import argparse
 from cosmic_f import cosmic_fengine
-from cosmic_f_remote.cosmif_fengine import CustomJsonEncoder, CustomJsonDecoder
+from cosmic_f_remote.cosmic_fengine import CustomJsonEncoder, CustomJsonDecoder
 
 
 PCIE_XDMA_DICT = None
