@@ -61,9 +61,9 @@ class Lo(Block):
             raise RuntimeError(message)
         if stream > self.n_streams:
             self._error(f"""Tried to set phase step for stream {stream} > n_streams ({self.n_streams})""")
-        self._debug(f"""Setting lo phase step of stream {stream} to {phase_step}""")
         phase_step_reg = f"""{stream}_phase_step"""
         phase_step *= 2**self._BP
+        self._debug(f"""Setting lo phase step of stream {stream} to {phase_step}""")
         self.write_int(phase_step_reg, int(phase_step))
 
     def get_phase_step(self, stream):
@@ -99,9 +99,9 @@ class Lo(Block):
             raise RuntimeError(message)
         if stream > self.n_streams:
             self._error(f"""Tried to set phase offset for stream {stream} > n_streams ({self.n_streams})""")
-        self._debug(f"""Setting lo phase offset of stream {stream} to {phase_offset}""")
         phase_offset_reg = f"""{stream}_phase_offset"""
         phase_offset *= 2**self._BP
+        self._debug(f"""Setting lo phase offset of stream {stream} to {phase_offset}""")
         self.write_int(phase_offset_reg, int(phase_offset))
 
     def get_phase_offset(self, stream):
