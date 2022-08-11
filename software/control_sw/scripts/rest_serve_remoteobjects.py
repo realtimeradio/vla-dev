@@ -2,22 +2,14 @@
 from flask import Flask
 from flask_restful import Resource
 from casperfpga import LocalPcieTransport
-from remoteobjects.server import addRemoteObjectResources, ObjectRegistry
+from remoteobjects.server import addRemoteObjectResources
 import argparse
 from cosmic_f import cosmic_fengine
-import numpy as np
-import json
+from cosmic_f_remote.cosmif_fengine import CustomJsonEncoder, CustomJsonDecoder
+
 
 PCIE_XDMA_DICT = None
 
-class CustomJsonEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, complex):
-            return (obj.real, obj.imag)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        else:
-            return super().default(obj)
 
 class FlaskConfig(object):
     RESTFUL_JSON = {}
@@ -25,6 +17,7 @@ class FlaskConfig(object):
     @staticmethod
     def init_app(app):
         app.json_encoder = CustomJsonEncoder
+        app.json_decoder = CustomJsonDecoder
         app.config['RESTFUL_JSON']['cls'] = app.json_encoder
 
 app = Flask(__name__)

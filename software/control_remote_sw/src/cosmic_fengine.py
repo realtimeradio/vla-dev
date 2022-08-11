@@ -1,6 +1,38 @@
+import json
+import numpy as np
+import io
 from remoteobjects.client import defineRemoteClass
 
+
 __COSMIC_FENGINE_REMOTE__ = None
+
+class CustomJsonEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, complex):
+            return (obj.real, obj.imag)
+        elif isinstance(obj, np.ndarray):
+            memfile = io.BytesIO()
+            np.save(memfile, obj)
+
+            serialized = memfile.getvalue()
+            return serialized.decode('latin-1')
+        else:
+            return super().default(obj)
+
+class CustomJsonDecoder(json.JSONDecoder):
+    def decode(self, obj):
+        rv = super().decode(obj)
+        if isinstance(rv, dict) and 'value' in rv:
+            # remote-object return values are returned as {'value': object} dicts
+            try:
+                memfile = io.BytesIO()
+                memfile.write(rv['value'].encode('latin-1'))
+                memfile.seek(0)
+                return {'value': np.load(memfile)}
+            except:
+                pass
+
+        return rv
 
 class CosmicFengine():
     global __COSMIC_FENGINE_REMOTE__
@@ -36,7 +68,9 @@ class CosmicFengine():
                     definition_dict,
                     delete_remote_on_del=False,
                     allowed_upload_extension_regex=r'\.fpg|\.yaml',
-                    attribute_depth_allowance=attribute_depth_allowance
+                    attribute_depth_allowance=attribute_depth_allowance,
+                    jsonEncoder=CustomJsonEncoder,
+                    jsonDecoder=CustomJsonDecoder,
             )
             CosmicFengineRemote_cldef = definition_dict['CosmicFengineRemote']
             __COSMIC_FENGINE_REMOTE__ = CosmicFengineRemote_cldef
