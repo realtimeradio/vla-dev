@@ -40,15 +40,26 @@ class CustomJsonDecoder(json.JSONDecoder):
         rv = super().decode(obj)
         if isinstance(rv, dict) and 'return' in rv:
             # remote-object return values are returned as {'return': object} dicts
-            try:
-                memfile = io.BytesIO()
-                memfile.write(rv['return'].encode('latin-1'))
-                memfile.seek(0)
-                rv['return'] = np.load(memfile)
-            except:
-                pass
+            val = rv['return']
+            if isinstance(val, str):
+                val = CustomJsonDecoder.numpy_loads(val)
+            elif isinstance(val, tuple) or isinstance(val, list):
+                for index in range(len(val)):
+                    if isinstance(val[index], str):
+                        val[index] = CustomJsonDecoder.numpy_loads(val[index])
+            rv['return'] = val
 
         return rv
+
+    @staticmethod
+    def numpy_loads(nmpystr):
+        try:
+            memfile = io.BytesIO()
+            memfile.write(nmpystr.encode('latin-1'))
+            memfile.seek(0)
+            return np.load(memfile)
+        except:
+            return nmpystr
 
 class CosmicFengine():
     global __COSMIC_FENGINE_REMOTE__
