@@ -18,21 +18,21 @@ class CustomJsonEncoder(json.JSONEncoder):
             return serialized.decode('latin-1')
 
         if isinstance(obj, np.int8):
-            obj = int(obj)
+            return int(obj)
         elif isinstance(obj, np.uint8):
-            obj = int(obj)
+            return int(obj)
         elif isinstance(obj, np.int16):
-            obj = int(obj)
+            return int(obj)
         elif isinstance(obj, np.uint16):
-            obj = int(obj)
+            return int(obj)
         elif isinstance(obj, np.int32):
-            obj = int(obj)
+            return int(obj)
         elif isinstance(obj, np.uint32):
-            obj = int(obj)
+            return int(obj)
         elif isinstance(obj, np.int64):
-            obj = int(obj)
+            return int(obj)
         elif isinstance(obj, np.uint64):
-            obj = int(obj)
+            return int(obj)
         return super().default(obj)
 
 class CustomJsonDecoder(json.JSONDecoder):
