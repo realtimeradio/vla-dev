@@ -16,17 +16,33 @@ class CustomJsonEncoder(json.JSONEncoder):
 
             serialized = memfile.getvalue()
             return serialized.decode('latin-1')
-        else:
-            return super().default(obj)
+
+        if isinstance(obj, np.int8):
+            obj = int(obj)
+        elif isinstance(obj, np.uint8):
+            obj = int(obj)
+        elif isinstance(obj, np.int16):
+            obj = int(obj)
+        elif isinstance(obj, np.uint16):
+            obj = int(obj)
+        elif isinstance(obj, np.int32):
+            obj = int(obj)
+        elif isinstance(obj, np.uint32):
+            obj = int(obj)
+        elif isinstance(obj, np.int64):
+            obj = int(obj)
+        elif isinstance(obj, np.uint64):
+            obj = int(obj)
+        return super().default(obj)
 
 class CustomJsonDecoder(json.JSONDecoder):
     def decode(self, obj):
         rv = super().decode(obj)
-        if isinstance(rv, dict) and 'value' in rv:
-            # remote-object return values are returned as {'value': object} dicts
+        if isinstance(rv, dict) and 'return' in rv:
+            # remote-object return values are returned as {'return': object} dicts
             try:
                 memfile = io.BytesIO()
-                memfile.write(rv['value'].encode('latin-1'))
+                memfile.write(rv['return'].encode('latin-1'))
                 memfile.seek(0)
                 rv['return'] = np.load(memfile)
             except:
