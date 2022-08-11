@@ -28,7 +28,7 @@ class CustomJsonDecoder(json.JSONDecoder):
                 memfile = io.BytesIO()
                 memfile.write(rv['value'].encode('latin-1'))
                 memfile.seek(0)
-                rv['value'] = np.load(memfile)
+                rv['return'] = np.load(memfile)
             except:
                 pass
 
