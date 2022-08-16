@@ -21,7 +21,7 @@ class Lo(Block):
     :param n_par_samples: Number of parallel ADC samples processed by the block.
     :type n_par_samples: int
 
-    :param samplehz: The ADC sample rate in MHz
+    :param samplehz: The ADC sample rate in Hz
     :type samplehz: float
 
     """
@@ -32,7 +32,7 @@ class Lo(Block):
     MIN_PHASE_STEP = -(2**_BW)//2
     MIN_PHASE_OFFSET = -(2**_BW)//2
 
-    def __init__(self, host, name, n_streams=4, n_par_samples=8, samplehz=2048, logger=None):
+    def __init__(self, host, name, n_streams=4, n_par_samples=8, samplehz=2048e6, logger=None):
         super(Lo, self).__init__(host, name, logger)
         self.n_streams = n_streams
         self.n_par_samples = n_par_samples
@@ -141,8 +141,8 @@ class Lo(Block):
         :param frequency_shift: The frequency shift to apply in Hz.
         :type frequency_shift: float
         """
-        phase_offset = (2**(self._BW-self._BP))*(frequency_shift/(self.samplehz*1E6))
-        assert phase_offset <= self.samplehz, f"""Specified frequency_shift {frequency_shift}MHz is larger than the ADC samplehz {self.samplehz}MHz."""
+        phase_offset = (2**(self._BW-self._BP))*(frequency_shift/(self.samplehz))
+        assert phase_offset <= self.samplehz, f"""Specified frequency_shift {frequency_shift}Hz is larger than the ADC sample hz {self.samplehz}Hz."""
         self.set_phase(stream, phase_offset)
 
     def get_lo_frequency_shift(self, stream):
@@ -155,7 +155,7 @@ class Lo(Block):
         :type stream: int
         """
         offset = self.get_phase_offset(stream)
-        scale = (self.samplehz*1E6)/(2**self._BW)
+        scale = (self.samplehz)/(2**self._BW)
         return (offset, scale)
 
     def initialize(self, read_only=False):
