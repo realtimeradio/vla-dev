@@ -7,3 +7,6 @@
 [submodule "firmware/mlib_devel"]
 	path = firmware/mlib_devel
 	url = https://github.com/realtimeradio/mlib_devel
+[submodule "software/remoteobjects-py"]
+	path = software/remoteobjects-py
+	url = https://github.com/MydonSolutions/remoteobjects-py.git
