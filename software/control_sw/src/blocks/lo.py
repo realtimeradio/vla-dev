@@ -145,7 +145,7 @@ class Lo(Block):
         assert phase_offset <= self.samplehz, f"""Specified frequency_shift {frequency_shift}Hz is larger than the ADC sample hz {self.samplehz}Hz."""
         self.set_phase(stream, phase_offset)
 
-    def get_lo_frequency_shift(self, stream):
+    def get_lo_frequency_shift(self, stream, return_in_hz = True):
         """
         This function retrieves the phase offset value 
         and returns a tuple containing it and the scaling factor to multiply with
@@ -153,10 +153,22 @@ class Lo(Block):
 
         :param stream: ADC stream index to which the phase should be applied.
         :type stream: int
+
+        :param return_in_hz: return the frequency shift in Hz if True otherwise return integer offset per ADC clock with it's bitwidth.
+        :type return_in_hz: bool
         """
         offset = self.get_phase_offset(stream)
-        scale = (self.samplehz)/(2**self._BW)
-        return (offset, scale)
+
+        return  offset * (self.samplehz)/(2**self._BW) if return_in_hz else (offset , self._BW)
+
+    def get_status(self):
+        """
+        Return pretty string displaying lo frequencies loaded for each stream
+        """
+        s_return = ""
+        for stream in range(self.n_streams):
+            s_return += f"""Stream {stream} loaded with LO frequency = {self.get_lo_frequency_shift(stream)}Hz\n"""
+        return s_return
 
     def initialize(self, read_only=False):
         """
