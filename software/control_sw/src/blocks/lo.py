@@ -141,8 +141,9 @@ class Lo(Block):
         :param frequency_shift: The frequency shift to apply in Hz.
         :type frequency_shift: float
         """
+        assert frequency_shift <= self.get_max_shift(), f"""Specified frequency_shift {frequency_shift}Hz is larger than the maximum shift allowed {self.get_max_shift()}Hz."""
+        assert frequency_shift >= self.get_min_shift(), f"""Specified frequency_shift {frequency_shift}Hz is smaller than the minimum shift allowed {self.get_min_shift()}Hz."""
         phase_offset = (2**(self._BW-self._BP))*(frequency_shift/(self.samplehz))
-        assert phase_offset <= self.samplehz, f"""Specified frequency_shift {frequency_shift}Hz is larger than the ADC sample hz {self.samplehz}Hz."""
         self.set_phase(stream, phase_offset)
 
     def get_lo_frequency_shift(self, stream, return_in_hz = True):
@@ -161,14 +162,42 @@ class Lo(Block):
 
         return  offset * (self.samplehz)/(2**self._BW) if return_in_hz else (offset , self._BW)
 
+    def get_max_shift(self):
+        """
+        Calculate the maximum allowed frequency shift.
+        """
+        return self.MAX_PHASE_OFFSET * (self.samplehz)/(2**self._BW)
+
+    def get_min_shift(self):
+        """
+        Calculate the minimum allowed frequency shift.
+        """
+        return self.MIN_PHASE_OFFSET * (self.samplehz)/(2**self._BW)
+
     def get_status(self):
         """
-        Return pretty string displaying lo frequencies loaded for each stream
+        Get status and error flag dictionaries.
+
+        Status keys:
+
+            - shifthz<``n``>: Currently loaded lo frequency shift for ADC input index ``n``.
+              in units of ADC samples.
+            - max_shift: The maximum lo offshift supported by the firmware.
+            - min_shift: The minimum lo offshift supported by the firmware.
+
+        :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
+            status key-value pairs. flags_dict is
+            a dictionary with all, or a sub-set, of the keys in `status_dict`. The values
+            held in this dictionary are as defined in `error_levels.py` and indicate
+            that values in the status dictionary are outside normal ranges.
         """
-        s_return = ""
+        stats = {}
+        flags = {}
         for stream in range(self.n_streams):
-            s_return += f"""Stream {stream} loaded with LO frequency = {self.get_lo_frequency_shift(stream)}Hz\n"""
-        return s_return
+            stats[f"shifthz{stream}"] = self.get_lo_frequency_shift(stream)
+        stats['max_shifthz'] = self.get_max_shift()
+        stats['min_shifthz'] = self.get_min_shift()
+        return stats,flags
 
     def initialize(self, read_only=False):
         """
