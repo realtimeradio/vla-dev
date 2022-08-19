@@ -83,6 +83,8 @@ class PhaseRotate(Block):
 
         :param stream: ADC stream index from which the fractional delay should be retrieved.
         :type stream: int
+
+        :return: (delay, bitwidth). Divide the delay by 2**bitwidth to scale back to how it was received.
         """
         if stream > self.n_streams:
             self._error(f"""Tried to fetch fractional delay for stream {stream} > n_streams ({self.n_streams})""")
@@ -92,7 +94,7 @@ class PhaseRotate(Block):
         int32_delay_lsb = self.read_int(delay_lsb_reg)
         int32_delay_msb = self.read_int(delay_msb_reg)
 
-        return float((int32_delay_msb << 32) + int32_delay_lsb) / (2**self.MAX_DELAY)
+        return (int32_delay_msb << 32) + int32_delay_lsb, 2 * self._BW
     
     def set_delay_rate(self, stream, delay_rate):
         """
@@ -128,6 +130,8 @@ class PhaseRotate(Block):
 
         :param stream: ADC stream index from which the delay rate should be retrieved.
         :type stream: int
+
+        :return: integer readout from the delay rate register.
         """
         if stream > self.n_streams:
             self._error(f"""Tried to fetch fractional delay for stream {stream} > n_streams ({self.n_streams})""")
@@ -168,6 +172,8 @@ class PhaseRotate(Block):
 
         :param stream: ADC stream index from which the delay phase should be retrieved.
         :type stream: int
+
+        :return: integer readout from phase register
         """
         if stream > self.n_streams:
             self._error(f"""Tried to fetch fractional delay for stream {stream} > n_streams ({self.n_streams})""")
@@ -208,12 +214,61 @@ class PhaseRotate(Block):
 
         :param stream: ADC stream index from which the delay phase rate should be retrieved.
         :type stream: int
+
+        :return: integer readout from phase rate register
         """
         if stream > self.n_streams:
             self._error(f"""Tried to fetch fractional delay for stream {stream} > n_streams ({self.n_streams})""")
         
         phase_reg_rate = f"""params{stream}_phase_rate"""
         return self.read_int(phase_reg_rate)
+
+    def get_status(self):
+        """
+        Get status and error flag dictionaries.
+
+        Status keys:
+
+            - delay<``n``>: Currently loaded delay for ADC input index ``n``
+              in units of ADC samples.
+            - delayrate<``n``>: Currently loaded delay rate for ADC input index ``n``
+              in units of ADC samples.
+            - phase<``n``>: Currently loaded phase for ADC input index ``n``
+              in units of ADC samples.
+            - phaserate<``n``>: Currently loaded phase rate for ADC input index ``n``
+              in units of ADC samples.
+            - max_delay: The maximum delay supported by the firmware.
+            - min_delay: The minimum delay supported by the firmware.
+            - max_delay_rate: The maximum delay rate supported by the firmware.
+            - min_delay_rate: The minimum delay rate supported by the firmware.
+            - max_phase: The maximum phase supported by the firmware.
+            - min_phase: The minimum phase supported by the firmware.
+            - max_phase_rate: The maximum phase rate supported by the firmware.
+            - min_phase_rate: The minimum phase rate supported by the firmware.
+
+        :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
+            status key-value pairs. flags_dict is
+            a dictionary with all, or a sub-set, of the keys in `status_dict`. The values
+            held in this dictionary are as defined in `error_levels.py` and indicate
+            that values in the status dictionary are outside normal ranges.
+        """
+        stats = {}
+        flags = {}
+
+        for stream in range(self.n_streams):
+            stats[f"delay{stream}"] = self.get_delay(stream)
+            stats[f"delayrate{stream}"] = self.get_delay_rate(stream)
+            stats[f"phase{stream}"] = self.get_phase(stream)
+            stats[f"phaserate{stream}"] = self.get_phase_rate(stream)
+        stats["max_delay"] = self.MAX_DELAY
+        stats["min_delay"] = self.MIN_DELAY
+        stats["max_delay_rate"] = self.MAX_DELAY_RATE
+        stats["min_delay_rate"] = self.MIN_DELAY_RATE
+        stats["max_phase"] = self.MAX_PHASE
+        stats["min_phase"] = self.MIN_PHASE
+        stats["max_phase_rate"] = self.MAX_PHASE_RATE
+        stats["min_phase_rate"] = self.MIN_PHASE_RATE
+        return stats,flags 
     
     def initialize(self, read_only=False):
         """
