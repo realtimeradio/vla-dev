@@ -67,9 +67,15 @@ if __name__ == '__main__':
             )
             object_id = f'{pcie_id_string}_{pipeline_id}'
             object_registry.obj_set_id(obj_id, object_id)
+            feng = object_registry.get_registered_object(object_id)
             print(f'Registered CosmicFengine `{object_id}`...')
             if pipeline_id == 0 and args.program:
-                object_registry.get_registered_object(object_id)._cfpga.upload_to_ram_and_program(args.fpgfile)
+                feng._cfpga.upload_to_ram_and_program(args.fpgfile)
                 print(f'\tProgrammed `{object_id}`...')
+            elif args.program:
+                feng = object_registry.get_registered_object(object_id)
+                feng._cfpga.get_system_information(args.fpgfile)
+                feng._initialize_blocks()
+                print(f'\tInitialized `{object_id}`...')
 
     app.run(host='0.0.0.0', port=6000, debug=False)
