@@ -471,9 +471,9 @@ class Dts(Block):
     def set_corruption_control(self, v):
         self.change_reg_bits('dts', v, 0, 12, word_offset=5)
 
-    def get_snapshot_data(self, band):
+    def get_snapshot_data(self, band, man_trig=True):
         ss = self.fpga.snapshots[self.prefix + 'stats_data_ss_snapshot%d' % band]
-        x, t = ss.read_raw(man_trig=True, man_valid=True)
+        x, t = ss.read_raw(man_trig=man_trig, man_valid=True)
         nwords = x['length'] // 2
         # 8-bit DTS data are cast to 12-bits by the interface, and then cast to 16-bits
         # by the snapshot. So shift out 8 unused bits

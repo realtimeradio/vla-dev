@@ -175,7 +175,9 @@ class CosmicFengine():
         #: Control interface to timing sync block
         self.sync        = sync.Sync(self._cfpga,
                 'pipeline%d_sync' % self.pipeline_id,
-                clk_hz = FPGA_CLOCK_RATE_HZ)
+                clk_hz = FPGA_CLOCK_RATE_HZ,
+                logger = self.logger
+            )
 
         #: QSFP ports
         self.qsfp_a      = qsfp.Qsfp(self._cfpga, 'qsfpa')
