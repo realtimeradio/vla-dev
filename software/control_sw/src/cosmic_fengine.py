@@ -798,17 +798,8 @@ class CosmicFengine():
             self.lo.set_lo_frequency_shift(stream, offshift)
 
         self.logger.info("Arming sync generators")
-        eth_states = [eth.tx_enabled() for eth in self.eths]
-        for eth in self.eths:
-            eth.disable_tx()
         self.sync.arm_sync()
-        self.sync.arm_noise()
-        if sw_sync:
-            self.logger.info("Issuing software sync")
-            self.sync.sw_sync()
-        for i, eth in enumerate(self.eths):
-            if eth_states[i]:
-                eth.enable_tx()
+
         return [
             self.lo.get_lo_frequency_shift(i, return_in_hz=True)
             for i in range(len(lo_fshift_list))
