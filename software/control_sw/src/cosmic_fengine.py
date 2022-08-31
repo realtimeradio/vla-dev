@@ -782,13 +782,16 @@ class CosmicFengine():
 
     def set_lo_frequency_shift(self, lo_fshift_list, sw_sync=False):
         '''
-        Sets the LO Frequency Shifts and resyncs
-        
-        :param sync: If True, synchronize (i.e., reset) the DSP pipeline.
-        :type sync: bool
+        Sets the LO Frequency Shifts and resyncs.
         
         :param lo_fshift_list: list of lo_fshifts in Hz to apply in order of streams.
         :type lo_fshift_list: List
+        
+        :param sw_sync: If True, issue a software reset trigger, rather than waiting
+            for an external reset pulse to be received over SMA.
+        :type sw_sync: bool
+
+        :return:  Returns the lo_frequency_shift values from the board in Hz
         '''
         for stream, offshift in enumerate(lo_fshift_list):
             self.lo.set_lo_frequency_shift(stream, offshift)
@@ -805,6 +808,10 @@ class CosmicFengine():
         for i, eth in enumerate(self.eths):
             if eth_states[i]:
                 eth.enable_tx()
+        return [
+            self.lo.get_lo_frequency_shift(i, return_in_hz=True)
+            for i in range(len(lo_fshift_list))
+        ]
 
     def read_chan_dest_ips_as_json(self):
         '''
