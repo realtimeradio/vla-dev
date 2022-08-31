@@ -554,7 +554,7 @@ class CosmicFengine():
                    chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
                    dests=[], dts_lane_map=None, fpgfile=None, sync_offset_ns=0.0,
-                   lo_fshift_list = [0.0,0.0,0.0,0.0]):
+                   lo_fshift_list = None):
         """
         Completely configure an F-engine from scratch.
 
@@ -628,7 +628,7 @@ class CosmicFengine():
             internal telescope time counter.
         :type sync_offset_ns: float
 
-        :param lo_fshift_list: list of lo_fshifts in Hz to apply in order of streams.
+        :param lo_fshift_list: If not None, a list of lo_fshifts in Hz to apply in order of streams.
         :type lo_fshift_list: List
         """
         if program:
@@ -650,8 +650,9 @@ class CosmicFengine():
             self.eqtvg.tvg_disable()
         
         #first, load lo_offshifts, assuming those received are in hz:
-        for stream, offshift in enumerate(lo_fshift_list):
-            self.lo.set_lo_frequency_shift(stream, offshift)
+        if lo_fshift_list is not None:
+            for stream, offshift in enumerate(lo_fshift_list):
+                self.lo.set_lo_frequency_shift(stream, offshift)
 
         if sync:
             self.logger.info("Arming sync generators")
