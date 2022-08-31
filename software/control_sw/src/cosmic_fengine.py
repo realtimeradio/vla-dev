@@ -780,6 +780,32 @@ class CosmicFengine():
         '''
         return [eth.tx_enabled() for eth in self.eths]
 
+    def set_lo_frequency_shift(self, lo_fshift_list, sw_sync=False):
+        '''
+        Sets the LO Frequency Shifts and resyncs
+        
+        :param sync: If True, synchronize (i.e., reset) the DSP pipeline.
+        :type sync: bool
+        
+        :param lo_fshift_list: list of lo_fshifts in Hz to apply in order of streams.
+        :type lo_fshift_list: List
+        '''
+        for stream, offshift in enumerate(lo_fshift_list):
+            self.lo.set_lo_frequency_shift(stream, offshift)
+
+        self.logger.info("Arming sync generators")
+        eth_states = [eth.tx_enabled() for eth in self.eths]
+        for eth in self.eths:
+            eth.disable_tx()
+        self.sync.arm_sync()
+        self.sync.arm_noise()
+        if sw_sync:
+            self.logger.info("Issuing software sync")
+            self.sync.sw_sync()
+        for i, eth in enumerate(self.eths):
+            if eth_states[i]:
+                eth.enable_tx()
+
     def read_chan_dest_ips_as_json(self):
         '''
         Reads the headers of the packetizer block and constructs a summative
@@ -836,7 +862,7 @@ class CosmicFengine():
                     ('Read headers from {} that indicate non-integer number of'
                     ' streams, there is probably an issue in the collation'
                     ' procedure: {} / {} = {}').format(
-                        feng.host,
+                        self.hostname,
                         packet_dest_ip['n_chans'],
                         packet_dest_ip['packet_nchan'],
                         packet_dest_ip['n_strm']
@@ -844,5 +870,5 @@ class CosmicFengine():
                 )
             packet_dest_ip['n_strm'] = int(0.5 + packet_dest_ip['n_strm'])
 
-        # print('{}[{}]: {}\n'.format(feng.host, interface, packet_dest_ips))
+        # print('{}[{}]: {}\n'.format(self.hostname, interface, packet_dest_ips))
         return json.dumps(packet_dest_ips)
