@@ -360,9 +360,9 @@ class Sync(Block):
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
             self._error("Took too long to configure telescope time register")
-        offset_samples = (offset_ns*1e9 / fs_hz)
+        offset_samples = offset_ns * (fs_hz*1e-9)
         offset_samples_aligned = int((offset_samples/sync_clock_factor) + 0.5) * sync_clock_factor # maintain factor
-        self.offset_ns = (offset_samples_aligned * fs_hz) / 1e9
+        self.offset_ns = offset_samples_aligned / (fs_hz*1e-9)
 
         self._info(
             "Offset of {} ns ({} samples) applied (requested {} ns rounded to {} samples, nearest multiple of {})".format(
