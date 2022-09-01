@@ -35,6 +35,8 @@ class Sync(Block):
         super(Sync, self).__init__(host, name, logger)
         self.clk_hz = clk_hz
 
+        self.offset_ns = 0.0
+
         self.sync_wait_timeout_limit_s = 0.5
         self.sync_wait_sleep_period_s = 0.0005
         self.sync_wait_sleep_count_limit = self.sync_wait_timeout_limit_s//self.sync_wait_sleep_period_s
@@ -358,7 +360,18 @@ class Sync(Block):
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
             self._error("Took too long to configure telescope time register")
-        next_sync_clocks = int(next_sync_clocks + (offset_ns*1e-9 / fs_hz))
+        offset_samples = (offset_ns*1e-9 / fs_hz)
+        offset_samples_aligned = int((offset_samples/sync_clock_factor) + 0.5) * sync_clock_factor # maintain factor
+        self.offset_ns = (offset_samples_aligned * fs_hz) / 1e-9
+
+        self._info(
+            "Offset of {} ns ({} samples) applied (requested {} ns rounded to {} samples, nearest multiple of {})".format(
+            self.offset_ns, offset_samples_aligned,
+            offset_ns, offset_samples,
+            sync_clock_factor
+        ))
+
+        next_sync_clocks = int(next_sync_clocks + offset_samples_aligned)
 
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
