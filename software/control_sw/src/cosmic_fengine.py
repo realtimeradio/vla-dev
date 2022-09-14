@@ -738,7 +738,8 @@ class CosmicFengine():
                         ips[pkt_num] = dest_ip
                         ports[pkt_num] = dest_port
                         # Use the order maps to figure out where we should put these antchans
-                        ant_order[antchans[pkt_num]] = ant
+                        ant_id = feng_ids[pkt_num] % ninput # TODO: is this right?
+                        ant_order[antchans[pkt_num]] = ant_id
                         chan_order[antchans[pkt_num]] = chans[cn*chans_per_packet:(cn+1)*chans_per_packet]
                         pkt_num += 1
             except:
