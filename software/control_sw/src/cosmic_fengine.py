@@ -208,6 +208,8 @@ class CosmicFengine():
         self.eths = []
         for i in range(self.neths):
             self.eths += [eth.Eth(self._cfpga, 'pipeline%d_eth%d' % (self.pipeline_id, i))]
+        for ethn, eth in enumerate(self.eths):
+            setattr(self, 'eth%d' % ethn, eth)
 
         #: Control interface to Input multiplexor / statistics
         self.input = input.Input(self._cfpga, 'pipeline%d_input' % self.pipeline_id,
