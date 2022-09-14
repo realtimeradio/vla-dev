@@ -190,4 +190,4 @@ class Eth(Block):
             self._get_eth_core()
         if self.core is None:
             raise RuntimeError("Couldn't get Ethernet CasperFpga object")
-        self.core.configure_core(mac, ip, port)
+        self.core.configure_core(mac, ip, port, subnet_mask='255.255.254.0')
