@@ -351,7 +351,7 @@ class Sync(Block):
             next_sync_clocks = int(round((now_clocks / sync_period))) + 1 
             next_sync_clocks *= sync_period
 
-            if next_sync_clocks % sync_clock_factor == 0:
+            if (next_sync_clocks + (sync_clock_factor/2)) % sync_clock_factor == 0: # waiting on better fixes
                 break
             else:
                 self._info("Next sync_clocks %d %% %d = %d != 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
