@@ -374,7 +374,7 @@ class Sync(Block):
 
         next_sync_clocks = int(next_sync_clocks + offset_samples_aligned)
 
-        self.load_internal_time(next_sync_clocks, software_load=False)
+        self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
         spare = next_sync - loaded_time
         self._info("Loaded new telescope time (%d) for %s (%.4f)" % (next_sync_clocks, time.ctime(next_sync), next_sync))
