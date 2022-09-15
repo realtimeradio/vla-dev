@@ -39,6 +39,7 @@ FIRMWARE_TYPE_3BIT = 3
 DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
 DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
 NTIME_PACKET = 32
+FPGA_CLOCKS_PER_SPECTRA = 256
 
 class CosmicFengine():
     """
@@ -641,7 +642,7 @@ class CosmicFengine():
                 self.dts.lane_map = dts_lane_map
             self.initialize(read_only=False, allow_unlocked_dts=test_vectors)
             self.logger.info('Updating telescope time')
-            self.sync.update_internal_time(offset_ns = sync_offset_ns, sync_clock_factor = NTIME_PACKET)
+            self.sync.update_internal_time(offset_ns = sync_offset_ns, sync_clock_factor = NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA)
 
         if test_vectors:
             self.logger.info('Enabling EQ TVGs...')

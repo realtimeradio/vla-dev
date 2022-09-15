@@ -349,13 +349,14 @@ class Sync(Block):
             now = time.time()
             now_clocks = int(now * fs_hz)
             next_sync_clocks = int(round((now_clocks / sync_period))) + 1 
+            next_sync_clocks *= sync_period
+
             if next_sync_clocks % sync_clock_factor == 0:
                 break
             else:
                 self._info("Next sync_clocks %d %% %d = %d != 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
         self._info("Next sync_clocks %d %% %d = %d == 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
 
-        next_sync_clocks *= sync_period
         next_sync = next_sync_clocks / fs_hz
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
@@ -373,7 +374,7 @@ class Sync(Block):
 
         next_sync_clocks = int(next_sync_clocks + offset_samples_aligned)
 
-        self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
+        self.load_internal_time(next_sync_clocks, software_load=False)
         loaded_time = time.time()
         spare = next_sync - loaded_time
         self._info("Loaded new telescope time (%d) for %s (%.4f)" % (next_sync_clocks, time.ctime(next_sync), next_sync))
