@@ -661,11 +661,17 @@ class CosmicFengine():
             self.logger.info("Arming sync generators")
             for eth in self.eths:
                 eth.disable_tx()
-            self.sync.arm_sync()
-            self.sync.arm_noise()
-            if sw_sync:
-                self.logger.info("Issuing software sync")
-                self.sync.sw_sync()
+            while True:
+                self.sync.arm_sync()
+                self.sync.arm_noise()
+                if sw_sync:
+                    self.logger.info("Issuing software sync")
+                    self.sync.sw_sync()
+
+                self.sync.wait_for_sync()
+                if self.sync.get_tt_of_sync() % NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA == 0:
+                    break
+                self.logger.warn("Rearming as tt_of_sync %d %% %d != 0" % (self.sync.get_tt_of_sync(), NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA))
         else:
             self.logger.warn("Absence of sync means lo offshifts will not load...")
 
@@ -803,10 +809,33 @@ class CosmicFengine():
 
         self.logger.info("Arming sync generators")
         self.sync.arm_sync()
+        if sw_sync:
+            self.logger.info("Issuing software sync")
+            self.sync.sw_sync()
 
         return [
             self.lo.get_lo_frequency_shift(i, return_in_hz=True)
             for i in range(len(lo_fshift_list))
+        ]
+
+    def set_lo_delays(self, lo_delay_list, force=False):
+        '''
+        Sets the LO Delays.
+        
+        :param lo_delay_list: list of delay in samples to apply in order of streams.
+        :type lo_delay_list: List
+        
+        :param force: If True, call delay.force_load().
+        :type sw_sync: bool
+
+        :return:  Returns the lo_delay values from the board in samples
+        '''
+        for stream, delay in enumerate(lo_delay_list):
+            self.delay.set_delay(stream, delay, force=force)
+
+        return [
+            self.delay.get_delay(stream)
+            for stream, _ in enumerate(lo_delay_list)
         ]
 
     def read_chan_dest_ips_as_json(self):
