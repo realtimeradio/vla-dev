@@ -661,17 +661,13 @@ class CosmicFengine():
             self.logger.info("Arming sync generators")
             for eth in self.eths:
                 eth.disable_tx()
-            while True:
-                self.sync.arm_sync()
-                self.sync.arm_noise()
-                if sw_sync:
-                    self.logger.info("Issuing software sync")
-                    self.sync.sw_sync()
-
-                self.sync.wait_for_sync()
-                if self.sync.get_tt_of_sync() % NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA == 0:
-                    break
-                self.logger.warn("Rearming as tt_of_sync %d %% %d != 0" % (self.sync.get_tt_of_sync(), NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA))
+            self.sync.arm_sync()
+            self.sync.arm_noise()
+            if sw_sync:
+                self.logger.info("Issuing software sync")
+                self.sync.sw_sync()
+            else:          
+                self._enforce_valid_tt_armed(rearm_noise=True)
         else:
             self.logger.warn("Absence of sync means lo offshifts will not load...")
 
@@ -808,15 +804,39 @@ class CosmicFengine():
             self.lo.set_lo_frequency_shift(stream, offshift)
 
         self.logger.info("Arming sync generators")
-        self.sync.arm_sync()
+        self.sync.arm_sync()        
         if sw_sync:
             self.logger.info("Issuing software sync")
             self.sync.sw_sync()
+        else:          
+            self._enforce_valid_tt_armed()
 
         return [
             self.lo.get_lo_frequency_shift(i, return_in_hz=True)
             for i in range(len(lo_fshift_list))
         ]
+
+    def _enforce_valid_tt_armed(self, rearm_limit=5, rearm_noise=False):
+        '''
+        Awaits a sync pulse and validates the telescope-time, re-arming and repeating if it's invalid.
+        '''
+        while True:
+            self.sync.wait_for_sync()
+            if self.sync.get_tt_of_sync() % NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA == 0:
+                self.logger.info("Validated tt_of_sync: %d" % (self.sync.get_tt_of_sync()))
+                break
+            if rearm_limit == 0:
+                self.logger.error("Failed to rearm a valid tt_of_sync (%d). Giving up." % (self.sync.get_tt_of_sync()))
+                break
+
+            self.sync.arm_sync()
+            if rearm_noise:
+                self.sync.arm_noise()
+            self.logger.warn("Rearming as tt_of_sync %d %% %d != 0" % (self.sync.get_tt_of_sync(), NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA))
+
+            rearm_limit -= 1
+            
+
 
     def set_lo_delays(self, lo_delay_list, force=False):
         '''
