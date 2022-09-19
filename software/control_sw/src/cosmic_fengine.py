@@ -642,7 +642,7 @@ class CosmicFengine():
                 self.dts.lane_map = dts_lane_map
             self.initialize(read_only=False, allow_unlocked_dts=test_vectors)
             self.logger.info('Updating telescope time')
-            self.sync.update_internal_time(offset_ns = sync_offset_ns, sync_clock_factor = NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA)
+            self.sync.update_internal_time(offset_ns = sync_offset_ns, sync_clock_factor = (NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA))
 
         if test_vectors:
             self.logger.info('Enabling EQ TVGs...')
@@ -822,7 +822,7 @@ class CosmicFengine():
         '''
         while True:
             self.sync.wait_for_sync()
-            if self.sync.get_tt_of_sync() % NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA == 0:
+            if self.sync.get_tt_of_sync() % (NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA) == 0:
                 self.logger.info("Validated tt_of_sync: %d" % (self.sync.get_tt_of_sync()))
                 break
             if rearm_limit == 0:
@@ -832,7 +832,7 @@ class CosmicFengine():
             self.sync.arm_sync()
             if rearm_noise:
                 self.sync.arm_noise()
-            self.logger.warn("Rearming as tt_of_sync %d %% %d != 0" % (self.sync.get_tt_of_sync(), NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA))
+            self.logger.warn("Rearming as tt_of_sync %d %% %d != 0" % (self.sync.get_tt_of_sync(), (NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA)))
 
             rearm_limit -= 1
             
