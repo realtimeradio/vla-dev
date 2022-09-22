@@ -307,6 +307,11 @@ class Sync(Block):
             internal telescope time counter.
         :type offset_ns: float
 
+        :return: next_sync_clocks: The value of the TT counter at the arrival
+            of the next sync pulse. Or, `None`, if the TT counter was loaded
+            late.
+        :rtype int:
+
         """
 
         fs_hz = fs_hz or self.clk_hz
@@ -357,6 +362,9 @@ class Sync(Block):
                 self._info("Next sync_clocks %d %% %d = %d != 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
         self._info("Next sync_clocks %d %% %d = %d == 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
 
+        # Wait for 20% of a sync period
+        time.sleep(sync_period_s * 0.2) # Earlier warning is issued if NTP offset > 10% of a period
+
         next_sync = next_sync_clocks / fs_hz
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
@@ -376,17 +384,19 @@ class Sync(Block):
 
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
-        spare = next_sync - loaded_time
+        spare = next_sync - loaded_time + (ntp_offset_us / 1e6)
         self._info("Loaded new telescope time (%d) for %s (%.4f)" % (next_sync_clocks, time.ctime(next_sync), next_sync))
         self._info("Load completed at %.4f" % loaded_time)
+        # Wait for a sync to pass so the TT is laoded before anything else happens
+        self.wait_for_sync()
+        if spare < 0:
+            self._error("Internal TT loaded after the expected sync arrival!")
+            return None
         if spare < sync_period_s / 4: # Must have loaded at least 1/4 period before sync
             self._warning("Internal TT loaded with only %.2f milliseconds to spare" % (1000*spare))
         else:
             self._info("Internal TT loaded with %.2f milliseconds to spare" % (1000*spare))
-        if spare < 0:
-            self._error("Internal TT loaded after the expected sync arrival!")
-        # Wait for a sync to pass so the TT is laoded before anything else happens
-        self.wait_for_sync()
+        return next_sync_clocks
 
     def get_status(self):
         """
