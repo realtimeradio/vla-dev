@@ -342,6 +342,8 @@ class Sync(Block):
         # Wrap fractional offsets
         if ntp_offset_f > 0.5:
             ntp_offset_f -= 1
+        if ntp_offset_us > 500000:
+            ntp_offset_us -= 1000000
         self._info("Last sync pulse arrived at time %.5f" % (ntp_us / 1e6))
         self._info("Sync pulses offset from NTP by %d us" % (ntp_offset_f * sync_period_us))
         if abs(ntp_offset_f) > 0.1:
