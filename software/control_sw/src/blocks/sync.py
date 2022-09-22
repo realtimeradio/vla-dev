@@ -387,6 +387,9 @@ class Sync(Block):
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
         spare = next_sync - loaded_time + (ntp_offset_us / 1e6)
+        self._info("Next sync time: %.3f" % next_sync)
+        self._info("Loaded time: %.3f" % loaded_time)
+        self._info("NTP offset: %.5f" % (ntp_offset_us/1e6))
         self._info("Loaded new telescope time (%d) for %s (%.4f)" % (next_sync_clocks, time.ctime(next_sync), next_sync))
         self._info("Load completed at %.4f" % loaded_time)
         # Wait for a sync to pass so the TT is laoded before anything else happens
