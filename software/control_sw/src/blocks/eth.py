@@ -34,6 +34,22 @@ class Eth(Block):
         if self.core is None:
             self._warning("Couldn't find Ethernet core. Will retry later")
 
+    def get_eth_core_details(self, read_arp=False):
+        """
+        Get Ethernet core parameters, returned as a dictionary of strings.
+
+        :param read_arp: If True, read the ARP table.
+        :type read_arp: Bool
+
+        :return: Dictionary of status keys, with each holding a string value.
+
+        """
+        x = self.core.get_gbe_core_details(read_arp=read_arp)
+        xstr = {}
+        for k, v in x.items():
+            xstr[k] = str(v)
+        return xstr
+
     def add_arp_entry(self, ip, mac):
         """
         Set a single arp entry.
@@ -174,4 +190,4 @@ class Eth(Block):
             self._get_eth_core()
         if self.core is None:
             raise RuntimeError("Couldn't get Ethernet CasperFpga object")
-        self.core.configure_core(mac, ip, port)
+        self.core.configure_core(mac, ip, port, subnet_mask='255.255.254.0')

@@ -39,6 +39,7 @@ FIRMWARE_TYPE_3BIT = 3
 DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
 DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
 NTIME_PACKET = 32
+FPGA_CLOCKS_PER_SPECTRA = 256
 
 class CosmicFengine():
     """
@@ -208,6 +209,8 @@ class CosmicFengine():
         self.eths = []
         for i in range(self.neths):
             self.eths += [eth.Eth(self._cfpga, 'pipeline%d_eth%d' % (self.pipeline_id, i))]
+        for ethn, ethblock in enumerate(self.eths):
+            setattr(self, 'eth%d' % ethn, ethblock)
 
         #: Control interface to Input multiplexor / statistics
         self.input = input.Input(self._cfpga, 'pipeline%d_input' % self.pipeline_id,
@@ -554,7 +557,7 @@ class CosmicFengine():
                    chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
                    dests=[], dts_lane_map=None, fpgfile=None, sync_offset_ns=0.0,
-                   lo_fshift_list = [0.0,0.0,0.0,0.0]):
+                   lo_fshift_list = None):
         """
         Completely configure an F-engine from scratch.
 
@@ -628,7 +631,7 @@ class CosmicFengine():
             internal telescope time counter.
         :type sync_offset_ns: float
 
-        :param lo_fshift_list: list of lo_fshifts in Hz to apply in order of streams.
+        :param lo_fshift_list: If not None, a list of lo_fshifts in Hz to apply in order of streams.
         :type lo_fshift_list: List
         """
         if program:
@@ -639,7 +642,7 @@ class CosmicFengine():
                 self.dts.lane_map = dts_lane_map
             self.initialize(read_only=False, allow_unlocked_dts=test_vectors)
             self.logger.info('Updating telescope time')
-            self.sync.update_internal_time(offset_ns = sync_offset_ns, sync_clock_factor = NTIME_PACKET)
+            self.sync.update_internal_time(offset_ns = sync_offset_ns, sync_clock_factor = (NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA))
 
         if test_vectors:
             self.logger.info('Enabling EQ TVGs...')
@@ -650,8 +653,9 @@ class CosmicFengine():
             self.eqtvg.tvg_disable()
         
         #first, load lo_offshifts, assuming those received are in hz:
-        for stream, offshift in enumerate(lo_fshift_list):
-            self.lo.set_lo_frequency_shift(stream, offshift)
+        if lo_fshift_list is not None:
+            for stream, offshift in enumerate(lo_fshift_list):
+                self.lo.set_lo_frequency_shift(stream, offshift)
 
         if sync:
             self.logger.info("Arming sync generators")
@@ -662,6 +666,8 @@ class CosmicFengine():
             if sw_sync:
                 self.logger.info("Issuing software sync")
                 self.sync.sw_sync()
+            else:          
+                self._enforce_valid_tt_armed(rearm_noise=True)
         else:
             self.logger.warn("Absence of sync means lo offshifts will not load...")
 
@@ -735,7 +741,8 @@ class CosmicFengine():
                         ips[pkt_num] = dest_ip
                         ports[pkt_num] = dest_port
                         # Use the order maps to figure out where we should put these antchans
-                        ant_order[antchans[pkt_num]] = ant
+                        ant_id = feng_ids[pkt_num] % ninput # TODO: is this right?
+                        ant_order[antchans[pkt_num]] = ant_id
                         chan_order[antchans[pkt_num]] = chans[cn*chans_per_packet:(cn+1)*chans_per_packet]
                         pkt_num += 1
             except:
@@ -779,6 +786,77 @@ class CosmicFengine():
         Returns `[eth.tx_enabled() for eth in self.eths]`. 
         '''
         return [eth.tx_enabled() for eth in self.eths]
+
+    def set_lo_frequency_shift(self, lo_fshift_list, sw_sync=False):
+        '''
+        Sets the LO Frequency Shifts and resyncs.
+        
+        :param lo_fshift_list: list of lo_fshifts in Hz to apply in order of streams.
+        :type lo_fshift_list: List
+        
+        :param sw_sync: If True, issue a software reset trigger, rather than waiting
+            for an external reset pulse to be received over SMA.
+        :type sw_sync: bool
+
+        :return:  Returns the lo_frequency_shift values from the board in Hz
+        '''
+        for stream, offshift in enumerate(lo_fshift_list):
+            self.lo.set_lo_frequency_shift(stream, offshift)
+
+        self.logger.info("Arming sync generators")
+        self.sync.arm_sync()        
+        if sw_sync:
+            self.logger.info("Issuing software sync")
+            self.sync.sw_sync()
+        else:          
+            self._enforce_valid_tt_armed()
+
+        return [
+            self.lo.get_lo_frequency_shift(i, return_in_hz=True)
+            for i in range(len(lo_fshift_list))
+        ]
+
+    def _enforce_valid_tt_armed(self, rearm_limit=5, rearm_noise=False):
+        '''
+        Awaits a sync pulse and validates the telescope-time, re-arming and repeating if it's invalid.
+        '''
+        while True:
+            self.sync.wait_for_sync()
+            if self.sync.get_tt_of_sync() % (NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA) == 0:
+                self.logger.info("Validated tt_of_sync: %d" % (self.sync.get_tt_of_sync()))
+                break
+            if rearm_limit == 0:
+                self.logger.error("Failed to rearm a valid tt_of_sync (%d). Giving up." % (self.sync.get_tt_of_sync()))
+                break
+
+            self.sync.arm_sync()
+            if rearm_noise:
+                self.sync.arm_noise()
+            self.logger.warn("Rearming as tt_of_sync %d %% %d != 0" % (self.sync.get_tt_of_sync(), (NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA)))
+
+            rearm_limit -= 1
+            
+
+
+    def set_lo_delays(self, lo_delay_list, force=False):
+        '''
+        Sets the LO Delays.
+        
+        :param lo_delay_list: list of delay in samples to apply in order of streams.
+        :type lo_delay_list: List
+        
+        :param force: If True, call delay.force_load().
+        :type sw_sync: bool
+
+        :return:  Returns the lo_delay values from the board in samples
+        '''
+        for stream, delay in enumerate(lo_delay_list):
+            self.delay.set_delay(stream, delay, force=force)
+
+        return [
+            self.delay.get_delay(stream)
+            for stream, _ in enumerate(lo_delay_list)
+        ]
 
     def read_chan_dest_ips_as_json(self):
         '''
@@ -836,7 +914,7 @@ class CosmicFengine():
                     ('Read headers from {} that indicate non-integer number of'
                     ' streams, there is probably an issue in the collation'
                     ' procedure: {} / {} = {}').format(
-                        feng.host,
+                        self.hostname,
                         packet_dest_ip['n_chans'],
                         packet_dest_ip['packet_nchan'],
                         packet_dest_ip['n_strm']
@@ -844,5 +922,5 @@ class CosmicFengine():
                 )
             packet_dest_ip['n_strm'] = int(0.5 + packet_dest_ip['n_strm'])
 
-        # print('{}[{}]: {}\n'.format(feng.host, interface, packet_dest_ips))
+        # print('{}[{}]: {}\n'.format(self.hostname, interface, packet_dest_ips))
         return json.dumps(packet_dest_ips)

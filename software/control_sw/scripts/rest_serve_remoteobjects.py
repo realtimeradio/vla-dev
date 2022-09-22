@@ -7,6 +7,11 @@ import argparse
 from cosmic_f import cosmic_fengine
 from cosmic_f_remote.cosmic_fengine import CustomJsonEncoder, CustomJsonDecoder
 
+from waitress import serve
+
+from guppy import hpy
+hpy_obj = hpy()
+
 
 PCIE_XDMA_DICT = None
 
@@ -38,6 +43,16 @@ class RestTransport_PciXdmaMap(Resource):
         }, 200
 
 flask_api.add_resource(RestTransport_PciXdmaMap, '/PciXdmaMap')
+
+
+class RestTransport_heap(Resource):
+    def get(self):
+
+        return {
+            'heap_str': str(hpy_obj.heap().all)
+        }, 200
+
+flask_api.add_resource(RestTransport_heap, '/heap')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -78,4 +93,4 @@ if __name__ == '__main__':
                 feng._initialize_blocks()
                 print(f'\tInitialized `{object_id}`...')
 
-    app.run(host='0.0.0.0', port=6000, debug=False)
+    serve(app, host='0.0.0.0', port=6000)
