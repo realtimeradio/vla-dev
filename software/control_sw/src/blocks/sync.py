@@ -343,9 +343,6 @@ class Sync(Block):
         # Wrap fractional offsets
         if ntp_offset_f > 0.5:
             ntp_offset_f -= 1
-        if ntp_offset_us > 500000:
-            ntp_offset_us -= 1000000
-        self._info("NTP offset usecs (wrapped): ntp_offset_us: %d" % ntp_offset_us)
         self._info("Last sync pulse arrived at time %.5f" % (ntp_us / 1e6))
         self._info("Sync pulses offset from NTP by %d us" % (ntp_offset_f * sync_period_us))
         if abs(ntp_offset_f) > 0.1:
@@ -388,7 +385,7 @@ class Sync(Block):
 
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
-        spare = next_sync - loaded_time + (ntp_offset_us / 1e6)
+        spare = next_sync - loaded_time + ((ntp_offset_f * sync_period_us)/ 1e6)
         self._info("Next sync time: %.3f" % next_sync)
         self._info("Loaded time: %.3f" % loaded_time)
         self._info("NTP offset: %.5f" % (ntp_offset_us/1e6))
