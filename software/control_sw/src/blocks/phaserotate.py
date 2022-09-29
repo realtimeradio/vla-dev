@@ -19,9 +19,6 @@ class PhaseRotate(Block):
     :param n_streams: Number of independent streams which may be shifted
     :type n_streams: int
 
-    :param n_par_samples: Number of parallel ADC samples processed by the block.
-    :type n_par_samples: int
-
     :param samplehz: The ADC sample rate in MHz
     :type samplehz: float
 
@@ -37,10 +34,9 @@ class PhaseRotate(Block):
     MIN_PHASE = 0 
     MIN_PHASE_RATE = 0 
 
-    def __init__(self, host, name, n_streams=4, n_par_samples=8, samplehz=2048, logger=None):
+    def __init__(self, host, name, n_streams=4, samplehz=2048, logger=None):
         super(PhaseRotate, self).__init__(host, name, logger)
         self.n_streams = n_streams
-        self.n_par_samples = n_par_samples
         self.samplehz = samplehz
 
     def set_delay(self, stream, delay):
@@ -222,6 +218,68 @@ class PhaseRotate(Block):
         
         phase_reg_rate = f"""params{stream}_phase_rate"""
         return self.read_int(phase_reg_rate)
+
+    def set_phase_ctrl(self, value):
+        """
+        Set the phase rotator control register.
+
+        :param value: control value to load
+        :type value: int
+        """
+        ctrl_reg = f"""ctrl"""
+        self.write_int(ctrl_reg, int(value))
+
+    def get_phase_ctrl(self):
+        """
+        Retrieve the programmed phase rotator control.
+
+        :return: integer readout from phase ctrl register
+        """
+        ctrl_reg = f"""ctrl"""
+        return self.read_int(ctrl_reg)
+
+    def set_target_load_time_msb(self, value):
+        """
+        Set the phase rotator target load time msb register.
+
+        :param value: msb load time value to load
+        :type value: int
+        """
+        load_time_msb_reg = f"target_load_time_msb"
+        #prepare it for a 32bit register 
+        value_to_load = value >> 32
+        self.write_int(load_time_msb_reg, value_to_load)
+    
+    def get_time_to_load_msb(self):
+        """
+        Retrieve the programmed phase rotator target load time msb value.
+
+        :return: integer readout from phase rotator target load time msb register
+        left shifted by 32bits to account for being msb of 64bit value
+        """
+        load_time_msb_reg = f"time_load_time_msb"
+        return self.read_int(load_time_msb_reg) >> 32
+
+    def set_target_load_time_lsb(self, value):
+        """
+        Set the phase rotator target load time lsb register.
+
+        :param value: lsb load time value to load
+        :type value: int
+        """
+        load_time_lsb_reg = f"target_load_time_lsb"
+        #prepare it for a 32bit register (masked to only lower 32bits) 
+        value_to_load = value & 0xffffffff
+        self.write_int(load_time_lsb_reg, value_to_load)
+    
+    def get_time_to_load_lsb(self):
+        """
+        Retrieve the programmed phase rotator target load time msb value.
+
+        :return: integer readout from phase rotator target load time msb register.
+        """
+        load_time_lsb_reg = f"time_load_time_lsb"
+        return self.read_int(load_time_lsb_reg)
 
     def get_status(self):
         """
