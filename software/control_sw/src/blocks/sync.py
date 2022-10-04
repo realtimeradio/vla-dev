@@ -350,23 +350,16 @@ class Sync(Block):
         
         # We assume that the master TT is tracking clocks since unix epoch.
         # Syncs should come every `sync_period` ADC clocks
-        while True: # ensure sync value is a multiple of sync_clock_factor
-            self.wait_for_sync()
-            now = time.time()
-            now_clocks = int(now * fs_hz)
-            next_sync_clocks = int(round((now_clocks / sync_period))) + 1 
-            next_sync_clocks *= sync_period
-
-            if (next_sync_clocks + (sync_clock_factor/2)) % sync_clock_factor == 0: # waiting on better fixes
-                break
-            else:
-                self._info("Next sync_clocks %d %% %d = %d != 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
-        self._info("Next sync_clocks %d %% %d = %d == 0" % (next_sync_clocks, sync_clock_factor, (next_sync_clocks)%sync_clock_factor))
+        self.wait_for_sync()
+        now = time.time()
+        now_clocks = int(now * fs_hz)
+        next_sync_clocks = int(round((now_clocks / sync_period))) + 1 
+        next_sync_clocks *= sync_period
+        next_sync = next_sync_clocks / fs_hz
 
         # Wait for 20% of a sync period
         time.sleep(sync_period_s * 0.2) # Earlier warning is issued if NTP offset > 10% of a period
 
-        next_sync = next_sync_clocks / fs_hz
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
             self._error("Took too long to configure telescope time register")
@@ -375,7 +368,7 @@ class Sync(Block):
         self.offset_ns = offset_samples_aligned / (fs_hz*1e-9)
 
         self._info(
-            "Offset of {} ns ({} samples) applied (requested {} ns rounded from {} samples, to the nearest multiple of {})".format(
+            "Offset of {} ns ({} samples) applied (requested {} ns ({} samples), rounded the nearest multiple of {} samples)".format(
             self.offset_ns, offset_samples_aligned,
             offset_ns, offset_samples,
             sync_clock_factor
