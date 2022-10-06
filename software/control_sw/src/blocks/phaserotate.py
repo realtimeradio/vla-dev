@@ -1,4 +1,5 @@
 from .block import Block
+from .timed_pulse import TimedPulse
 import numpy as np
 from cosmic_f.error_levels import *
 import time
@@ -36,6 +37,7 @@ class PhaseRotate(Block):
 
     def __init__(self, host, name, n_streams=4, samplehz=2048, logger=None):
         super(PhaseRotate, self).__init__(host, name, logger)
+        self.timer = TimedPulse(host, name+"_timing", logger)
         self.n_streams = n_streams
         self.samplehz = samplehz
 
@@ -219,67 +221,38 @@ class PhaseRotate(Block):
         phase_reg_rate = f"""params{stream}_phase_rate"""
         return self.read_int(phase_reg_rate)
 
-    def set_phase_ctrl(self, value):
+    def set_target_load_time(self, value):
         """
-        Set the phase rotator control register.
+        Set the phase rotator target load time.
 
-        :param value: control value to load
+        :param value: TT value to load, in units of FPGA clocks
         :type value: int
         """
-        ctrl_reg = f"""ctrl"""
-        self.write_int(ctrl_reg, int(value))
+        self.timer.set_target_tt(value)
 
-    def get_phase_ctrl(self):
+    def get_target_load_time(self, value):
         """
-        Retrieve the programmed phase rotator control.
+        Get the current phase rotator target load time.
 
-        :return: integer readout from phase ctrl register
-        """
-        ctrl_reg = f"""ctrl"""
-        return self.read_int(ctrl_reg)
-
-    def set_target_load_time_msb(self, value):
-        """
-        Set the phase rotator target load time msb register.
-
-        :param value: msb load time value to load
+        :param value: TT value to load, in units of FPGA clocks
         :type value: int
         """
-        load_time_msb_reg = f"target_load_time_msb"
-        #prepare it for a 32bit register 
-        value_to_load = value >> 32
-        self.write_int(load_time_msb_reg, value_to_load)
+        self.timer.get_target_tt()
     
-    def get_time_to_load_msb(self):
+    def get_time_to_load(self):
         """
-        Retrieve the programmed phase rotator target load time msb value.
+        Retrieve the programmed phase rotator target load time.
 
-        :return: integer readout from phase rotator target load time msb register
-        left shifted by 32bits to account for being msb of 64bit value
+        :return: Number of FPGA clocks until target load time is reached.
+        :rtype: int
         """
-        load_time_msb_reg = f"time_load_time_msb"
-        return self.read_int(load_time_msb_reg) >> 32
+        return self.timer.get_time_to_load()
 
-    def set_target_load_time_lsb(self, value):
+    def force_load(self):
         """
-        Set the phase rotator target load time lsb register.
-
-        :param value: lsb load time value to load
-        :type value: int
+        Force immediate load of all phase/delay parameters.
         """
-        load_time_lsb_reg = f"target_load_time_lsb"
-        #prepare it for a 32bit register (masked to only lower 32bits) 
-        value_to_load = value & 0xffffffff
-        self.write_int(load_time_lsb_reg, value_to_load)
-    
-    def get_time_to_load_lsb(self):
-        """
-        Retrieve the programmed phase rotator target load time msb value.
-
-        :return: integer readout from phase rotator target load time msb register.
-        """
-        load_time_lsb_reg = f"time_load_time_lsb"
-        return self.read_int(load_time_lsb_reg)
+        self.timer.force_pulse()
 
     def get_status(self):
         """
@@ -310,8 +283,7 @@ class PhaseRotate(Block):
             held in this dictionary are as defined in `error_levels.py` and indicate
             that values in the status dictionary are outside normal ranges.
         """
-        stats = {}
-        flags = {}
+        stats, flags = self.timer.get_status()
 
         for stream in range(self.n_streams):
             stats[f"delay{stream}"] = self.get_delay(stream)
@@ -337,6 +309,7 @@ class PhaseRotate(Block):
         :type read_only: bool
 
         """
+        self.timer.intialize(read_only=read_only)
         if not read_only:
             for i in range(self.n_streams):
                 self.set_phase_rate(i, 0.0)
