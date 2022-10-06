@@ -789,7 +789,7 @@ class CosmicFengine():
 
     def set_lo_frequency_shift(self, lo_fshift_list, sw_sync=False):
         '''
-        Sets the LO Frequency Shifts and resyncs.
+        Sets the LO Frequency Shifts and resyncs, disabling tx for the duration of the function.
         
         :param lo_fshift_list: list of lo_fshifts in Hz to apply in order of streams.
         :type lo_fshift_list: List
@@ -800,6 +800,9 @@ class CosmicFengine():
 
         :return:  Returns the lo_frequency_shift values from the board in Hz
         '''
+        tx_enabled_mask = self.tx_enabled()
+        self.disable_tx()
+
         for stream, offshift in enumerate(lo_fshift_list):
             self.lo.set_lo_frequency_shift(stream, offshift)
 
@@ -810,6 +813,10 @@ class CosmicFengine():
             self.sync.sw_sync()
         else:          
             self._enforce_valid_tt_armed()
+
+        for i, eth in enumerate(self.eths):
+            if tx_enabled_mask[i]:
+                eth.enable_tx()
 
         return [
             self.lo.get_lo_frequency_shift(i, return_in_hz=True)
