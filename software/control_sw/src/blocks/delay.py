@@ -1,5 +1,4 @@
 from .block import Block
-from .timed_pulse import TimedPulse
 from cosmic_f.error_levels import *
 
 class Delay(Block):
@@ -23,7 +22,6 @@ class Delay(Block):
     DEFAULT_MAX_DELAY = 2**18 - 1
     def __init__(self, host, name, n_streams=64, logger=None):
         super(Delay, self).__init__(host, name, logger)
-        self.timer = TimedPulse(host, name+"_timing", logger)
         self.n_streams = n_streams
         self.max_delay = None
 
@@ -77,7 +75,8 @@ class Delay(Block):
         """
         Force immediate load of all delays.
         """
-        self.timer.force_pulse()
+        self.change_reg_bits('ctrl',1, 0)
+        self.change_reg_bits('ctrl',0, 0)
 
     def get_delay(self, stream):
         """
@@ -104,7 +103,6 @@ class Delay(Block):
         :type read_only: bool
 
         """
-        self.timer.initialize(read_only=read_only)
         self.max_delay = self.get_max_delay()
         if not read_only:
             for i in range(self.n_streams):
@@ -129,7 +127,8 @@ class Delay(Block):
             that values in the status dictionary are outside normal ranges.
 
         """
-        stats, flags = self.timer.get_status()
+        stats = {}
+        flags = {}
         for i in range(self.n_streams):
             stats['delay%.2d' % i] = self.get_delay(i)
         stats['max_delay'] = self.get_max_delay()-1
