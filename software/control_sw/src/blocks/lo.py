@@ -215,7 +215,7 @@ class Lo(Block):
         :type read_only: bool
 
         """
-        self.timer.intialize(read_only=read_only)
+        self.timer.initialize(read_only=read_only)
         if not read_only:
             for i in range(self.n_streams):
                 self.set_lo_frequency_shift(i, 0.0)
