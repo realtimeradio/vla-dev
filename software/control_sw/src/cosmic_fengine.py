@@ -13,6 +13,7 @@ from .blocks import block
 from .blocks import fpga
 from .blocks import sync
 from .blocks import delay
+from .blocks import phaserotate
 from .blocks import lo
 from .blocks import input
 from .blocks import noisegen
@@ -192,6 +193,10 @@ class CosmicFengine():
         self.delay       = delay.Delay(self._cfpga,
                 'pipeline%d_delay' % self.pipeline_id,
                 n_streams = 4)
+            
+        self.phaserotate = phaserotate.PhaseRotate(self._cfpga,
+                'pipeline%d_phase_rotate' % self.pipeline_id,
+                n_streams = 4)
 
         self.lo       = lo.Lo(self._cfpga,
                 'pipeline%d_lo' % self.pipeline_id,
@@ -257,6 +262,7 @@ class CosmicFengine():
             'fpga'        : self.fpga,
             'sync'        : self.sync,
             'delay'       : self.delay,
+            'phaserotate' : self.phaserotate,
             'lo'          : self.lo,
             'noisegen'    : self.noisegen,
             'sinegen'     : self.sinegen,
