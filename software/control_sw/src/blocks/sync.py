@@ -39,7 +39,6 @@ class Sync(Block):
 
         self.sync_wait_timeout_limit_s = 0.5
         self.sync_wait_sleep_period_s = 0.0005
-        self.sync_wait_sleep_count_limit = self.sync_wait_timeout_limit_s//self.sync_wait_sleep_period_s
     
     def uptime(self):
         """
@@ -104,11 +103,14 @@ class Sync(Block):
         """
         Block until a sync has been received.
         """
+        tstart = time.time()
+        ttimeout = tstart + self.sync_wait_timeout_limit_s
         c = self.count_ext()
-        timeout = self.sync_wait_sleep_count_limit-2 # count down to -1, so condition is MSB
-        while(self.count_ext() == c and timeout >= 0):
+        while(self.count_ext() == c):
+            if time.time() > ttimeout:
+                self._warning("Timed out waiting for sync pulse")
+                break
             time.sleep(self.sync_wait_sleep_period_s)
-            timeout -= 1
 
     #def wait_for_pps(self, timeout=2.0):
     #    """
