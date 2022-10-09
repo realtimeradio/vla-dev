@@ -132,14 +132,20 @@ class Sync(Block):
     #        time.sleep(0.05)
     #    return c1
 
-    def arm_sync(self):
+    def arm_sync(self, wait=True):
         """
         Arm sync pulse generator, which passes sync pulses to the
         design DSP.
+
+        :param wait: If True, wait for a sync to pass before returning.
+        :type wait: bool
         """
         self.change_reg_bits('ctrl', 0, self.OFFSET_ARM_SYNC_OUT)
         self.change_reg_bits('ctrl', 1, self.OFFSET_ARM_SYNC_OUT)
         self.change_reg_bits('ctrl', 0, self.OFFSET_ARM_SYNC_OUT)
+        if wait:
+            self.wait_for_sync()
+            time.sleep(0.2) # The latest firmware doesn't sync immediately on the pulse
 
     def arm_noise(self):
         """
@@ -157,6 +163,7 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
+        time.sleep(0.2) # Ensure the sync has propagated
 
     #def set_output_sync_rate(self, mask):
     #    """
