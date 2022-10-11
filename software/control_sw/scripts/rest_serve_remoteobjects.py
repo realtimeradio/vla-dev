@@ -7,10 +7,9 @@ import argparse
 from cosmic_f import cosmic_fengine
 from cosmic_f_remote.cosmic_fengine import CustomJsonEncoder, CustomJsonDecoder
 
-from waitress import serve
+import os
 
-from guppy import hpy
-hpy_obj = hpy()
+from waitress import serve
 
 
 PCIE_XDMA_DICT = None
@@ -45,15 +44,6 @@ class RestTransport_PciXdmaMap(Resource):
 flask_api.add_resource(RestTransport_PciXdmaMap, '/PciXdmaMap')
 
 
-class RestTransport_heap(Resource):
-    def get(self):
-
-        return {
-            'heap_str': str(hpy_obj.heap().all)
-        }, 200
-
-flask_api.add_resource(RestTransport_heap, '/heap')
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description=('Initialize a REST server exposing local PCIe FPGA device'
@@ -69,6 +59,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     PCIE_XDMA_DICT = LocalPcieTransport.get_pcie_xdma_map()
+
+    if 'PCIE_BLACKLIST' in os.environ:
+        for pcie_dev in os.environ['PCIE_BLACKLIST'].split(','):
+            PCIE_XDMA_DICT.pop(pcie_dev)
+
     for (pcie_id, xdma_id) in PCIE_XDMA_DICT.items():
         for pipeline_id in range(2):
             pcie_id_string = f'pcie{pcie_id}'
