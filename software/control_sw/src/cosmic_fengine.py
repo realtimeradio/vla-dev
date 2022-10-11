@@ -300,8 +300,11 @@ class CosmicFengine():
                 b.initialize(read_only=read_only)
                 if blockname == 'dts':
                     dts_status = b.get_status_dict()
-                    if not dts_status['state_ok']['all_ok']:
+                    if dts_status['state_ok']['all_ok']:
+                        self.logger.info(f'DTS block properly initialized: {dts_status["state_ok"]}')
+                    else:
                         raise RuntimeError(f'DTS block did not initialize properly: {dts_status["state_ok"]}')
+
             elif isinstance(b, list):
                 for bi in b:
                     if isinstance(bi, block.Block):
