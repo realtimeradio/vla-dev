@@ -122,14 +122,14 @@ class NoiseGen(Block):
         """
         Initialize the block
 
-        :param read_only: If False, set the seen of noise generator ``n`` to ``n``.
+        :param read_only: If False, set the seed of noise generator ``n`` to ``n``.
             If True, do nothing.
         :type read_only: bool
         """
         if read_only:
             return
         for n in range(self.n_noise):
-            self.set_seed(0, n)
+            self.set_seed(n,n)
 
     def get_status(self):
         """
