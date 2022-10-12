@@ -39,7 +39,6 @@ class Sync(Block):
 
         self.sync_wait_timeout_limit_s = 0.5
         self.sync_wait_sleep_period_s = 0.0005
-        self.sync_wait_sleep_count_limit = self.sync_wait_timeout_limit_s//self.sync_wait_sleep_period_s
     
     def uptime(self):
         """
@@ -104,11 +103,14 @@ class Sync(Block):
         """
         Block until a sync has been received.
         """
+        tstart = time.time()
+        ttimeout = tstart + self.sync_wait_timeout_limit_s
         c = self.count_ext()
-        timeout = self.sync_wait_sleep_count_limit-2 # count down to -1, so condition is MSB
-        while(self.count_ext() == c and timeout >= 0):
+        while(self.count_ext() == c):
+            if time.time() > ttimeout:
+                self._warning("Timed out waiting for sync pulse")
+                break
             time.sleep(self.sync_wait_sleep_period_s)
-            timeout -= 1
 
     #def wait_for_pps(self, timeout=2.0):
     #    """
@@ -132,14 +134,20 @@ class Sync(Block):
     #        time.sleep(0.05)
     #    return c1
 
-    def arm_sync(self):
+    def arm_sync(self, wait=True):
         """
         Arm sync pulse generator, which passes sync pulses to the
         design DSP.
+
+        :param wait: If True, wait for a sync to pass before returning.
+        :type wait: bool
         """
         self.change_reg_bits('ctrl', 0, self.OFFSET_ARM_SYNC_OUT)
         self.change_reg_bits('ctrl', 1, self.OFFSET_ARM_SYNC_OUT)
         self.change_reg_bits('ctrl', 0, self.OFFSET_ARM_SYNC_OUT)
+        if wait:
+            self.wait_for_sync()
+            time.sleep(0.2) # The latest firmware doesn't sync immediately on the pulse
 
     def arm_noise(self):
         """
@@ -157,6 +165,7 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
+        time.sleep(0.2) # Ensure the sync has propagated
 
     #def set_output_sync_rate(self, mask):
     #    """
