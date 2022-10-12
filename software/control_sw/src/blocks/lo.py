@@ -1,4 +1,5 @@
 from .block import Block
+from .timed_pulse import TimedPulse
 import numpy as np
 from cosmic_f.error_levels import *
 
@@ -34,6 +35,7 @@ class Lo(Block):
 
     def __init__(self, host, name, n_streams=4, n_par_samples=8, samplehz=2048e6, logger=None):
         super(Lo, self).__init__(host, name, logger)
+        self.timer = TimedPulse(host, name+"_timing", logger)
         self.n_streams = n_streams
         self.n_par_samples = n_par_samples
         self.samplehz = samplehz
@@ -65,6 +67,12 @@ class Lo(Block):
         phase_step *= 2**self._BP
         self._debug(f"""Setting lo phase step of stream {stream} to {phase_step}""")
         self.write_int(phase_step_reg, int(phase_step))
+
+    def force_load(self):
+        """
+        Force immediate load of all phase/delay parameters.
+        """
+        self.timer.force_pulse()
 
     def get_phase_step(self, stream):
         """
@@ -191,8 +199,7 @@ class Lo(Block):
             held in this dictionary are as defined in `error_levels.py` and indicate
             that values in the status dictionary are outside normal ranges.
         """
-        stats = {}
-        flags = {}
+        stats, flags = self.timer.get_status()
         for stream in range(self.n_streams):
             stats[f"shifthz{stream}"] = self.get_lo_frequency_shift(stream)
         stats['max_shifthz'] = self.get_max_shift()
