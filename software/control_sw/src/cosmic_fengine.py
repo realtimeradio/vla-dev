@@ -664,6 +664,7 @@ class CosmicFengine():
         if lo_fshift_list is not None:
             for stream, offshift in enumerate(lo_fshift_list):
                 self.lo.set_lo_frequency_shift(stream, offshift)
+            self.lo.force_load()
 
         if sync:
             self.logger.info("Arming sync generators")
@@ -813,14 +814,15 @@ class CosmicFengine():
 
         for stream, offshift in enumerate(lo_fshift_list):
             self.lo.set_lo_frequency_shift(stream, offshift)
+        self.lo.force_load()
 
-        self.logger.info("Arming sync generators")
-        self.sync.arm_sync()        
-        if sw_sync:
-            self.logger.info("Issuing software sync")
-            self.sync.sw_sync()
-        else:          
-            self._enforce_valid_tt_armed()
+        # self.logger.info("Arming sync generators")
+        # self.sync.arm_sync()        
+        # if sw_sync:
+        #     self.logger.info("Issuing software sync")
+        #     self.sync.sw_sync()
+        # else:          
+        self._enforce_valid_tt_armed()
 
         for i, eth in enumerate(self.eths):
             if tx_enabled_mask[i]:
