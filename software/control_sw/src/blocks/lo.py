@@ -219,3 +219,4 @@ class Lo(Block):
         if not read_only:
             for i in range(self.n_streams):
                 self.set_lo_frequency_shift(i, 0.0)
+            self.force_load()

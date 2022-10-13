@@ -323,6 +323,46 @@ class Dts(Block):
 
         return stats, flags
 
+    def get_status_dict(self):
+        state_dict = {
+            'gty_lock_state': self.get_gty_lock_state(),
+            'lock_state': self.get_lock_state(),
+            'synced': self.is_synced(),
+        }
+        state_ok_dict = {
+            'gty_lock_ok': state_dict['gty_lock_state'] == 4095,
+            'lock_ok': state_dict['lock_state'] == 4095,
+            'sync_ok': state_dict['synced'],
+        }
+        parity_ok_dict = {
+            'time_ok': True,
+            'err_acc_ok': True,
+            'err_count_ok': True,
+        }
+        parity_errors = self.get_parity_errs()
+        for err in parity_errors:
+            if err['time'] != parity_errors[0]['time']:
+                parity_ok_dict['time_ok'] = False
+            if err['acc'] != 0:
+                parity_ok_dict['err_acc_ok'] = False
+            if err['count'] != 0:
+                parity_ok_dict['err_count_ok'] = False
+            
+            if not any(parity_ok_dict.values()):
+                break
+        
+        state_ok_dict['all_ok'] = all(state_ok_dict.values())
+        parity_ok_dict['all_ok'] = all(parity_ok_dict.values())
+
+        return {
+            'ok': state_ok_dict['all_ok'] and parity_ok_dict['all_ok'],
+            'state_ok': state_ok_dict,
+            'parity_ok': parity_ok_dict,
+            'state': state_dict,
+            'parity_errors': parity_errors,
+        }
+
+
     def initialize(self, read_only=False):
         if read_only:
             return

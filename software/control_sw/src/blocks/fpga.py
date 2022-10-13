@@ -30,7 +30,7 @@ class Fpga(Block):
             self.server_hostname = socket.gethostname()
         except:
             self.server_hostname = ''
-        self.sysmon = casperfpga.sysmon.Sysmon(self.host)
+        self.sysmon = None #casperfpga.sysmon.Sysmon(self.host)
 
     def get_fpga_clock(self):
         """
@@ -162,13 +162,14 @@ class Fpga(Block):
             stats['fw_version'] = self.get_firmware_version()
             stats['fw_type'] = self.get_firmware_type()
             stats['fw_build_time'] = datetime.datetime.fromtimestamp(self.get_build_time()).isoformat()
-        try:
-            stats.update(self.sysmon.get_all_sensors())
-            stats['sys_mon'] = 'reporting'
-            flags['sys_mon'] = FENG_OK
-        except:
-            stats['sys_mon'] = 'not reporting'
-            flags['sys_mon'] = FENG_ERROR
+        if self.sysmon is not None:
+            try:
+                stats.update(self.sysmon.get_all_sensors())
+                stats['sys_mon'] = 'reporting'
+                flags['sys_mon'] = FENG_OK
+            except:
+                stats['sys_mon'] = 'not reporting'
+                flags['sys_mon'] = FENG_ERROR
         if not stats['programmed']:
             flags['programmed'] = FENG_WARNING
         if stats['sw_version'].endswith('dirty'):
