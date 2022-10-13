@@ -285,7 +285,8 @@ class CosmicFengine():
     def initialize(self, read_only=True, allow_unlocked_dts=False):
         """
         Call the ```initialize`` methods of all underlying blocks, then
-        optionally issue a software global reset.
+        optionally issue a software global reset. Raises RuntimeErrors if
+        a block is not ok.
 
         :param read_only: If True, call the underlying initialization methods
             in a read_only manner, and skip software reset.
@@ -303,14 +304,21 @@ class CosmicFengine():
                 self.logger.info("Initializing block (writable): %s" % blockname)
             if isinstance(b, block.Block):
                 b.initialize(read_only=read_only)
+                if blockname == 'dts':
+                    dts_status = b.get_status_dict()
+                    if dts_status['state_ok']['all_ok']:
+                        self.logger.info(f'DTS block properly initialized: {dts_status["state_ok"]}')
+                    else:
+                        raise RuntimeError(f'DTS block did not initialize properly: {dts_status["state_ok"]}')
+
             elif isinstance(b, list):
                 for bi in b:
                     if isinstance(bi, block.Block):
                         bi.initialize(read_only=read_only)
-        if not read_only:
-            self.logger.info("Performing software global reset")
-            #self.sync.arm_sync()
-            #self.sync.sw_sync()
+        # if not read_only:
+        #     self.logger.info("Performing software global reset")
+        #     self.sync.arm_sync()
+        #     self.sync.sw_sync()
 
     def get_status_all(self):
         """
@@ -662,6 +670,7 @@ class CosmicFengine():
         if lo_fshift_list is not None:
             for stream, offshift in enumerate(lo_fshift_list):
                 self.lo.set_lo_frequency_shift(stream, offshift)
+            self.lo.force_load()
 
         if sync:
             self.logger.info("Arming sync generators")
@@ -811,14 +820,15 @@ class CosmicFengine():
 
         for stream, offshift in enumerate(lo_fshift_list):
             self.lo.set_lo_frequency_shift(stream, offshift)
+        self.lo.force_load()
 
-        self.logger.info("Arming sync generators")
-        self.sync.arm_sync()        
-        if sw_sync:
-            self.logger.info("Issuing software sync")
-            self.sync.sw_sync()
-        else:          
-            self._enforce_valid_tt_armed()
+        # self.logger.info("Arming sync generators")
+        # self.sync.arm_sync()        
+        # if sw_sync:
+        #     self.logger.info("Issuing software sync")
+        #     self.sync.sw_sync()
+        # else:          
+        self._enforce_valid_tt_armed()
 
         for i, eth in enumerate(self.eths):
             if tx_enabled_mask[i]:
