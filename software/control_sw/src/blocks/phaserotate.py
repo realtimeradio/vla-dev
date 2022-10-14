@@ -32,6 +32,8 @@ class PhaseRotate(Block):
     _PHASE_BP = 31
     _PHASE_RATE_BW=32
     _PHASE_RATE_BP=31
+    _FIRMWARE_PHASE_BP = 31
+    _FIRMWARE_SLOPE_BP = 31
 
     MAX_DELAY = (2**(_DELAY_BW -1) -1) / (2**_DELAY_BP)
     MAX_DELAY_RATE = (2**(_DELAY_RATE_BW-1) -1) / (2**_DELAY_RATE_BP)
@@ -44,7 +46,7 @@ class PhaseRotate(Block):
     FINE_DELAY_LOAD_PERIOD = 4 # It takes 4 spectra to compute and load delays
     RATE_SCALE_FACTOR = 2**5   # The firmware divides rates down by this amount
 
-    def __init__(self, host, name, n_streams=4, samplehz=2048, logger=None):
+    def __init__(self, host, name, n_streams=4, samplehz=2048000000, logger=None):
         super(PhaseRotate, self).__init__(host, name, logger)
         self.timer = TimedPulse(host, name+"_timing", logger)
         self.n_streams = n_streams
@@ -309,13 +311,12 @@ class PhaseRotate(Block):
         :param stream: ADC stream index for which the slope should be retrieved.
         :type stream: int
 
-        :return: integer readout from stream-specific slope register with accompanying register bitwidth
-                 of the signed register
+        :return: tuple of integer readout from stream-specific slope register with scaling
         """
         if stream > self.n_streams:
             self._error(f"""Tried to fetch slope for stream {stream} > n_streams ({self.n_streams})""")
         slope_reg = f"fd{stream}_slope"
-        return self.read_int(slope_reg)
+        return self.read_int(slope_reg), 2**self._FIRMWARE_SLOPE_BP
 
     def get_firmware_phase(self, stream):
         """
@@ -324,13 +325,12 @@ class PhaseRotate(Block):
         :param stream: ADC stream index for which the phase should be retrieved.
         :type stream: int
 
-        :return: integer readout from stream-specific phase register with accompanying register bitwidth
-                 of the signed register
+        :return: tuple of integer readout from stream-specific phase register with scaling
         """
         if stream > self.n_streams:
             self._error(f"""Tried to fetch phase for stream {stream} > n_streams ({self.n_streams})""")
         phase_reg = f"fd{stream}_phase"
-        return self.read_int(phase_reg)
+        return self.read_int(phase_reg), 2**self._FIRMWARE_PHASE_BP
         
     def set_target_load_time(self, value):
         """
@@ -347,24 +347,26 @@ class PhaseRotate(Block):
         """
         self.timer.force_pulse()
 
-    def get_target_load_time(self, value):
+    def enable_load(self):
+        """
+        Enable the loading of values when target TT is reached
+        """
+        self.timer.enable_tt_pulse()
+
+    def disable_load(self):
+        """
+        Disable the loading of values when target TT is reached
+        """
+        self.timer.disable_tt_pulse()
+
+    def get_target_load_time(self):
         """
         Get the current phase rotator target load time.
 
         :return: integer readout from phase ctrl register
         """
-        ctrl_reg = f"""ctrl"""
-        return self.read_uint(ctrl_reg)
+        return self.timer.get_target_tt()
 
-    def set_target_load_time_msb(self, value):
-        """
-        Set the phase rotator target load time msb register.
-
-        :param value: msb load time value to load
-        :param value: TT value to load, in units of FPGA clocks
-        :type value: int
-        """
-        self.timer.get_target_tt()
     
     def get_time_to_load(self):
         """
@@ -376,12 +378,6 @@ class PhaseRotate(Block):
         :rtype: int
         """
         return self.timer.get_time_to_load()
-
-    def force_load(self):
-        """
-        Force immediate load of all phase/delay parameters.
-        """
-        self.timer.force_pulse()
 
     def get_status(self):
         """
