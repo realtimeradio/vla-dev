@@ -33,14 +33,14 @@ class PhaseRotate(Block):
     _PHASE_RATE_BW=32
     _PHASE_RATE_BP=31
 
-    MAX_DELAY = (2**_DELAY_BW -1 ) / (2**_DELAY_BP) -1
-    MAX_DELAY_RATE = (2**_DELAY_RATE_BW-1) / (2**_DELAY_RATE_BP) -1 
-    MAX_PHASE = (2**_PHASE_BW-1) / (2**_PHASE_BP)-1 
-    MAX_PHASE_RATE = (2**_PHASE_RATE_BW-1) / (2**_PHASE_RATE_BP)-1
-    MIN_DELAY = -(2**_DELAY_BW ) / (2**_DELAY_BP)
-    MIN_DELAY_RATE = -(2**_DELAY_RATE_BW-1) / (2**_DELAY_RATE_BP) 
-    MIN_PHASE = -(2**_PHASE_BW-1) / (2**_PHASE_BP)
-    MIN_PHASE_RATE = -(2**_PHASE_RATE_BW-1) / (2**_PHASE_RATE_BP) 
+    MAX_DELAY = (2**(_DELAY_BW -1) -1) / (2**_DELAY_BP)
+    MAX_DELAY_RATE = (2**(_DELAY_RATE_BW-1) -1) / (2**_DELAY_RATE_BP)
+    MAX_PHASE = (2**(_PHASE_BW-1) -1) / (2**_PHASE_BP)
+    MAX_PHASE_RATE = (2**(_PHASE_RATE_BW-1) -1) / (2**_PHASE_RATE_BP)
+    MIN_DELAY = -(2**(_DELAY_BW-1) ) / (2**_DELAY_BP)
+    MIN_DELAY_RATE = -(2**(_DELAY_RATE_BW-1)) / (2**_DELAY_RATE_BP) 
+    MIN_PHASE = -(2**(_PHASE_BW-1)) / (2**_PHASE_BP)
+    MIN_PHASE_RATE = -(2**(_PHASE_RATE_BW-1)) / (2**_PHASE_RATE_BP) 
     FINE_DELAY_LOAD_PERIOD = 4 # It takes 4 spectra to compute and load delays
     RATE_SCALE_FACTOR = 2**5   # The firmware divides rates down by this amount
 
@@ -103,7 +103,7 @@ class PhaseRotate(Block):
         :param stream: ADC stream index from which the fractional delay should be retrieved.
         :type stream: int
 
-        :return: uint(delay)
+        :return: uint(delay), scale
         """
         if stream > self.n_streams:
             self._error(f"""Tried to fetch fractional delay for stream {stream} > n_streams ({self.n_streams})""")
@@ -114,7 +114,12 @@ class PhaseRotate(Block):
         uint32_delay_msb = self.read_uint(delay_msb_reg)
 
         composite_val = (uint32_delay_msb << 32) + uint32_delay_lsb
-        return composite_val
+
+        #If greater than the most positive option for signed representation, it was negative:
+        if composite_val > (2**(self._DELAY_BW -1) -1):
+            composite_val -= 2**self._DELAY_BW
+
+        return composite_val, 2**self._DELAY_BP
     
     def set_delay_rate(self, stream, delay_rate):
         """
@@ -165,14 +170,19 @@ class PhaseRotate(Block):
         :param stream: ADC stream index from which the delay rate should be retrieved.
         :type stream: int
 
-        :return: uint(delay_rate)
+        :return: uint(delay_rate), scale
         """
         if stream > self.n_streams:
             self._error(f"""Tried to fetch delay rate for stream {stream} > n_streams ({self.n_streams})""")
         
         delay_rate_reg = f"""params{stream}_delay_rate"""
         val = self.read_uint(delay_rate_reg)
-        return val
+
+        #If greater than the most positive option for signed representation, it was negative:
+        if val > (2**(self._DELAY_RATE_BW-1) -1):
+            val -= 2**self._DELAY_RATE_BW
+
+        return val, (2**self._DELAY_RATE_BP * self.RATE_SCALE_FACTOR * self.FINE_DELAY_LOAD_PERIOD)
 
     def set_phase(self, stream, phase):
         """
@@ -223,7 +233,12 @@ class PhaseRotate(Block):
         
         phase_reg = f"""params{stream}_phase"""
         val = self.read_uint(phase_reg)
-        return val
+
+        #If greater than the most positive option for signed representation, it was negative:
+        if val > (2**(self._PHASE_BW-1) -1):
+            val -= 2**self._PHASE_BW
+
+        return val, 2**self._PHASE_BP
 
     def set_phase_rate(self, stream, phase_rate):
         """
@@ -281,7 +296,11 @@ class PhaseRotate(Block):
         phase_reg_rate = f"""params{stream}_phase_rate"""
         val = self.read_uint(phase_reg_rate)
 
-        return val
+        #If greater than the most positive option for signed representation, it was negative:
+        if val > (2**(self._PHASE_RATE_BW-1) -1):
+            val -= 2**self._PHASE_RATE_BW
+
+        return val, (2**self._PHASE_RATE_BP * self.RATE_SCALE_FACTOR * self.FINE_DELAY_LOAD_PERIOD)
 
     def get_firmware_slope(self, stream):
         """
@@ -326,8 +345,7 @@ class PhaseRotate(Block):
         """
         Force immediate load of all delays.
         """
-        self.change_reg_bits('ctrl',1, 0)
-        self.change_reg_bits('ctrl',0, 0)
+        self.timer.force_pulse()
 
     def get_target_load_time(self, value):
         """
@@ -389,9 +407,7 @@ class PhaseRotate(Block):
             - min_phase: The minimum phase supported by the firmware.
             - max_phase_rate: The maximum phase rate supported by the firmware.
             - min_phase_rate: The minimum phase rate supported by the firmware.
-            - ctrl: The contents of the control register.
-            - time_to_load_msb: The contents of the time_to_load_msb register.
-            - time_to_load_lsb: The contents of the time_to_load_lsb register.
+            - time_to_load: The contents of the timer.time_to_load register.
 
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
             status key-value pairs. flags_dict is
@@ -417,9 +433,7 @@ class PhaseRotate(Block):
         stats["min_phase"] = self.MIN_PHASE
         stats["max_phase_rate"] = self.MAX_PHASE_RATE
         stats["min_phase_rate"] = self.MIN_PHASE_RATE
-        stats["ctrl"] = self.get_ctrl()
-        stats["time_to_load_msb"] = self.get_time_to_load_msb()
-        stats["time_to_load_lsb"] = self.get_time_to_load_lsb()
+        stats["time_to_load"] = self.get_time_to_load()
         return stats,flags 
     
     def initialize(self, read_only=False):
