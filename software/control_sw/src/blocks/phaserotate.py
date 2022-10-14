@@ -332,21 +332,27 @@ class PhaseRotate(Block):
         phase_reg = f"fd{stream}_phase"
         return self.read_int(phase_reg), 2**self._FIRMWARE_PHASE_BP
         
-    def set_target_load_time(self, value):
+    def set_target_load_time(self, value, enable_trig=True):
         """
-        Set the phase rotator target load time.
+        Load a new target TT
 
-        :param value: TT value to load, in units of FPGA clocks
+        :param value: Telescope time to load
         :type value: int
+
+        :param enable_trig: If True, enable the triggering of a sync pulse
+            at this time. Else, set the load_time registers but don't
+            enable the triggering system.
+        :type enable_trig: bool
+
         """
-        self.timer.set_target_tt(value)
+        self.timer.set_target_tt(value, enable_trig=enable_trig)
 
     def force_load(self):
         """
         Force immediate load of all delays.
         """
         self.timer.force_pulse()
-
+    
     def enable_load(self):
         """
         Enable the loading of values when target TT is reached
@@ -361,20 +367,20 @@ class PhaseRotate(Block):
 
     def get_target_load_time(self):
         """
-        Get the current phase rotator target load time.
-
-        :return: integer readout from phase ctrl register
+        Get currently set target load time.
+        
+        :return: target_tt
+        :rtype: int
         """
         return self.timer.get_target_tt()
-
     
     def get_time_to_load(self):
         """
-        load_time_msb_reg = f"time_to_load_msb"
-        return self.read_uint(load_time_msb_reg)
-        Retrieve the programmed phase rotator target load time.
-
-        :return: Number of FPGA clocks until target load time is reached.
+        Get number of FPGA clocks until load trigger.
+        The returned value will be negative if the trigger time
+        is in the past.
+        
+        :return: time_to_load
         :rtype: int
         """
         return self.timer.get_time_to_load()

@@ -1,5 +1,6 @@
 from .block import Block
 from .timed_pulse import TimedPulse
+import time
 from cosmic_f.error_levels import *
 
 class Delay(Block):
@@ -73,11 +74,58 @@ class Delay(Block):
         if force:
             self.force_load()
 
+    def set_target_load_time(self, value, enable_trig=True):
+        """
+        Load a new target TT
+
+        :param value: Telescope time to load
+        :type value: int
+
+        :param enable_trig: If True, enable the triggering of a sync pulse
+            at this time. Else, set the load_time registers but don't
+            enable the triggering system.
+        :type enable_trig: bool
+
+        """
+        self.timer.set_target_tt(value, enable_trig=enable_trig)
+
     def force_load(self):
         """
         Force immediate load of all delays.
         """
         self.timer.force_pulse()
+    
+    def enable_load(self):
+        """
+        Enable the loading of values when target TT is reached
+        """
+        self.timer.enable_tt_pulse()
+
+    def disable_load(self):
+        """
+        Disable the loading of values when target TT is reached
+        """
+        self.timer.disable_tt_pulse()
+
+    def get_target_load_time(self):
+        """
+        Get currently set target load time.
+        
+        :return: target_tt
+        :rtype: int
+        """
+        return self.timer.get_target_tt()
+    
+    def get_time_to_load(self):
+        """
+        Get number of FPGA clocks until load trigger.
+        The returned value will be negative if the trigger time
+        is in the past.
+        
+        :return: time_to_load
+        :rtype: int
+        """
+        return self.timer.get_time_to_load()
 
     def get_delay(self, stream):
         """
