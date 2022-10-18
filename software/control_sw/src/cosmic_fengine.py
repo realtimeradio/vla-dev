@@ -796,6 +796,12 @@ class CosmicFengine():
         '''
         return [eth.tx_enabled() for eth in self.eths]
 
+    def tx_packet_rate(self):
+        '''
+        Returns `[eth.get_packet_rate() for eth in self.eths]`. 
+        '''
+        return [eth.get_packet_rate() for eth in self.eths]
+
     def set_lo_frequency_shift(self, lo_fshift_list, sw_sync=False):
         '''
         Sets the LO Frequency Shifts and resyncs, disabling tx for the duration of the function.
