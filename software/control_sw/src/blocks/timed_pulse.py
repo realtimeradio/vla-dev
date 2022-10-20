@@ -61,7 +61,7 @@ class TimedPulse(Block):
         assert tt < 2**64
         assert tt >= 0
         self.write_int('target_load_time_msb', tt >> 32)
-        self.write_int('tartget_load_time_lsb', tt & 0xffffffff)
+        self.write_int('target_load_time_lsb', tt & 0xffffffff)
         if enable_trig:
             self.enable_tt_pulse()
         else:
