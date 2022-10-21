@@ -60,8 +60,8 @@ if __name__ == '__main__':
 
     PCIE_XDMA_DICT = LocalPcieTransport.get_pcie_xdma_map()
 
-    if 'PCIE_BLACKLIST' in os.environ:
-        for pcie_dev in os.environ['PCIE_BLACKLIST'].split(','):
+    if 'PCIE_IGNORE' in os.environ:
+        for pcie_dev in os.environ['PCIE_IGNORE'].split(','):
             PCIE_XDMA_DICT.pop(pcie_dev)
 
     for (pcie_id, xdma_id) in PCIE_XDMA_DICT.items():
