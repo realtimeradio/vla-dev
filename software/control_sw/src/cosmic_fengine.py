@@ -4,6 +4,7 @@ import struct
 import time
 import datetime
 import os
+import redis
 import json
 import casperfpga
 from . import helpers
@@ -61,6 +62,12 @@ class CosmicFengine():
         triggers the transport to be a RemotePcieTransport object.
     :type remote_uri: str
 
+    :param redis_host: Redis server host address
+    :type redis_host: str
+
+    :param redis_port: Redis server port address
+    :type redis_port: str
+
     :param fpgfile: .fpg file for firmware to program (or already loaded)
     :type fpgfile: str
 
@@ -75,7 +82,7 @@ class CosmicFengine():
 
     """
 
-    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None):
+    def __init__(self, host, fpgfile, pipeline_id=0, neths=1, logger=None, remote_uri=None, redis_host=None, redis_port=None):
         self.hostname = host #: hostname of the F-Engine's host SNAP2 board
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
@@ -105,6 +112,10 @@ class CosmicFengine():
             else:
                 self._cfpga.upload_to_ram_and_program(fpgfile)
             
+        if redis_host is None or redis_port is None:
+            self.redis_obj = None
+        else:
+            self.redis_obj = redis.Redis(host = redis_host, port = redis_port, decode_responses=True)
 
         self.blocks = {}
         try:
