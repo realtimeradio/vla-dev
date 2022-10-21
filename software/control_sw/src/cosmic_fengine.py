@@ -184,6 +184,7 @@ class CosmicFengine():
         # blocks
         #: Control interface to high-level FPGA functionality
         self.fpga        = fpga.Fpga(self._cfpga, "")
+        self._set_antname()
 
         #: Control interface to timing sync block
         self.sync        = sync.Sync(self._cfpga,
@@ -797,7 +798,29 @@ class CosmicFengine():
 
         self.logger.info("Startup of %s complete" % self.hostname)
 
-    def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, load_time=None, clock_rate_hz=2048000000, invert_band=False):
+    def _set_antname(self):
+        """
+        Lookup in META_antennaProperties,
+        the corresponding antenna name for this fengine device server name,
+        hostname and pipeline id.
+        """
+        if self.redis_obj is not None:
+            antennaproperties = self.redis_obj.hgetall("META_antennaProperties")
+            for key, value in antennaproperties.items():
+                try:
+                    deserialised = json.loads(value)
+                    antennaproperties[key] = deserialised
+                except:
+                    pass
+            for ant, prop in antennaproperties.items():
+                if (self.fpga.server_hostname == prop["server"] 
+                    and self.hostname == prop["pcie_id"] 
+                    and self.pipeline_id == prop["pipeline_id"]):
+                    self.fpga.set_connected_antname(ant)
+        else:
+            self.fpga.set_connected_antname(None)
+
+    def delay_tracking(self, delays, delay_rates, phases, phase_rates, clock_rate_hz=2048000000, invert_band=False):
         """
         Set this F-engine to track a given delay curve.
         :param delays: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
