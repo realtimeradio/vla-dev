@@ -834,6 +834,159 @@ class CosmicFengine():
             Internally, delay rate is converted from nanoseconds-per-second to
             samples-per-spectra. Firmware delays are updated every 4 spectra.
         :type delay_rates: float
+        :param delay_rate_rates: 4-tuple of delay rate rates for X and Y polarizations for both tunings. Each value is
+            the delay rate rate, in nanoseconds per second^2. The incremental delay
+            which should be added to the current delay each second.
+            Internally, delay rate rate is converted from nanoseconds-per-second^2 to
+            samples-per-spectra. Firmware delays are updated every 4 spectra.
+        :type delay_rate_rates: float
+        :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
+            the observed PPS interval, which could fail if the PPS is unstable or not present.
+        :type clock_rate_hz: int
+        :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
+            apply a fractional delay which is the negative of the physical delay.
+        :type invert_band: bool
+        """
+        delay_samples = np.array(delays) * (1e-9 * clock_rate_hz)
+        delay_samples_int = np.zeros(self.delay.n_streams, dtype=int)
+        for if_id in range(self.delay.n_streams):
+            # If delay rate is positive, want to make fractional delay as small as possible,
+            # so round delay up
+            if delay_rates[if_id] > 0:
+                delay_samples_int[if_id] = int(np.ceil(delay_samples[if_id]))
+            # If delay rate is negative, we want to make fractional delay as large as possible,
+            # so round integer delay down
+            elif delay_rates[if_id]==0:
+                if delay_samples[if_id] >=0:
+                    delay_samples_int[if_id] = int(np.floor(delay_samples[if_id]))
+                else:
+                    delay_samples_int[if_id] = int(np.ceil(delay_samples[if_id]))
+            else:
+                delay_samples_int[if_id] = int(np.floor(delay_samples[if_id]))
+
+        delay_samples_frac = (delay_samples - delay_samples_int).astype(np.float)
+        # Massage rates into samples-per-spectra (lots of redundant use of clock rate...)
+        delay_rates_samples_per_sec = np.array(delay_rates) * 1e-9 * clock_rate_hz
+        delay_rates_samples_per_spec = delay_rates_samples_per_sec * (2* self.autocorr.n_chans) / clock_rate_hz
+        # Convert phases to range +/- pi and normalize
+        phases = np.array(phases) / np.pi # normalize to fractions of pi
+        phases = ((phases + 1) % 2) - 1   # place in range +/- 1
+
+        # Convert phase rates to fractions of pi per spectra
+        self.logger.debug("Phase rates [radians per sec]: %s" % phase_rates)
+        phase_rates_per_spec = np.array(phase_rates) * (2*self.autocorr.n_chans) / clock_rate_hz
+        self.logger.debug("Phase rates [radians per spectrum]: %s" % phase_rates_per_spec)
+        phase_rates_per_spec = phase_rates_per_spec / np.pi # normalize to fractions of pi
+        self.logger.debug("Phase rates [pis per spectrum]: %s" % phase_rates_per_spec)
+        phase_rates_per_spec = ((phase_rates_per_spec + 1) % 2) - 1        # place in range +/- 1
+        self.logger.debug("Wrapped Phase rates [pis per spectrum]: %s" % phase_rates_per_spec)
+        self.logger.debug("Integer sample delays: %s" % (delay_samples_int))
+        self.logger.debug("Fractional sample delays: %s" % (delay_samples_frac))
+        self.logger.debug("Phase being set to: %s" % phases)
+        self.logger.debug("Phase rates being set to: %s" % phase_rates_per_spec)
+
+        #Load the delays:
+        self.delay.disable_load() # Disable load during configuration for delay
+        self.phaserotate.disable_load() # Disable load during configuration for phaserotate
+        
+        for i in range(self.delay.n_streams):
+            self.delay.set_delay(i, delay_samples_int[i])
+            delay_frac = delay_samples_frac[i]
+            delay_rate = delay_rates_samples_per_spec[i]
+            if invert_band:
+                delay_frac = -delay_frac
+                delay_rate = -delay_rate
+
+            self.phaserotate.set_delay(i, delay_frac)
+            self.phaserotate.set_delay_rate(i, delay_rate)
+            self.phaserotate.set_phase(i, phases[i])
+            self.phaserotate.set_phase_rate(i, phase_rates_per_spec[i])
+
+    def start_delay_tracking(self, clock_rate_hz=2048000000, invert_band=False):
+        """
+        Started in a thread, this function calls on delay_tracking to update the fengine coefficients for 
+        delay tracking. It reads the delay, delay rate and delay rate rate coefficients from redis
+        and calculate the delay, delay rate, phase and phase rate for the F-Engine
+
+        :param redis_host: The host ip for the redis server
+        :type redis_host: str
+        :param redis_port: The redis server port
+        :type redis_port: int
+        :param clock_rate_hz: The FPGA clock rate
+        :type clock_rate_hz: int
+        :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
+            apply a fractional delay which is the negative of the physical delay.
+        :type invert_band: bool
+        """
+        DELAY_POLLING_PERIOD = 5 #s
+        DELAY_LOADING_PERIOD = 1 #s
+        PERIODS_PER_PERIOD = DELAY_POLLING_PERIOD//DELAY_LOADING_PERIOD
+        #Open the outer while loop for the redis polling:
+        for i in range(10):
+            print(f"Outside loop entered. Iteration {i}")
+            #Load the delay values from redis
+            if self.redis_obj is not None:
+                delay_coeffs = self.redis_obj.hget("META_modelDelays", self.fpga.get_connected_antname())
+                try:
+                    delay_coeffs = json.loads(delay_coeffs)
+                except:
+                    pass
+                    
+                print(f"Fetched the following delay coefficients:\n{delay_coeffs}")
+            else:
+                logging.warn("""Cosmic Fengine has no redis object instance. Cannot load delays
+                for delay tracking.""")
+                return
+        
+            #Open an inner while loop of a higher cadence than the redis polling one:
+            iteration = 0 
+            while iteration < PERIODS_PER_PERIOD:
+                print("Inside loop entered")
+                onesec_future = (time.time() + 1)
+                onesec_future_spectra_mult = int(onesec_future*1e6)
+                onesec_future_spectra_mult_fpgaclks =  onesec_future_spectra_mult * 256 #in fpga clocks
+
+                loadtime_diff_modeltime = (onesec_future_spectra_mult/(1e6) - delay_coeffs["time_value"]) #calculate 1s into the future
+                delay_raterate = delay_coeffs["delay_raterate_nsps2"]
+                delay_rate = delay_coeffs["delay_rate_nsps"]
+                delay = delay_coeffs["delay_ns"]
+                # T = ax^2 + bx + c
+                delay_at_loadtime_diff_modeltime = [delay_raterate*(loadtime_diff_modeltime**2) + delay_rate*loadtime_diff_modeltime + delay]*self.delay.n_streams
+                # dT/dt = 2ax + b
+                delay_rate_at_loadtime_diff_modeltime = [delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams
+                
+                print(f"Delay calculated for time {loadtime_diff_modeltime}")
+                print(f"Delay value being loaded:\n{delay_at_loadtime_diff_modeltime} delay")
+                print(f"Delay rate value being loaded:\n{delay_rate_at_loadtime_diff_modeltime} delay/ns")
+
+                #Load delays:
+                self.delay_tracking(delay_at_loadtime_diff_modeltime, delay_rate_at_loadtime_diff_modeltime,
+                                     [0,0,0,0], [0,0,0,0],
+                                     clock_rate_hz=clock_rate_hz, invert_band=invert_band)
+
+                print(f"Delay load times being set to: {onesec_future_spectra_mult_fpgaclks}")
+                self.delay.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
+                self.phaserotate.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
+
+                iteration +=1
+                time.sleep(DELAY_LOADING_PERIOD)
+                
+            time.sleep(DELAY_POLLING_PERIOD)
+
+    def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, load_time=None, clock_rate_hz=2048000000, invert_band=False):
+        """
+        Set the delay tracking for this F-Engine once.
+        :param delays: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
+            the delay, in nanoseconds, which should be applied at the appropriate time.
+            Whole ADC sample delays are implemented using a coarse delay, while sub-sample
+            delays are implemented as a post-FFT phase rotation.
+        :type delays: float
+        :param delay_rates: 4-tuple of delay rates for X and Y polarizations for both tunings. Each value is
+            the delay rate, in nanoseconds per second. The incremental delay
+            which should be added to the current delay each second.
+            Internally, delay rate is converted from nanoseconds-per-second to
+            samples-per-spectra. Firmware delays are updated every 4 spectra.
+        :type delay_rates: float
         :param phases: 4-tuple of phases for X and Y polarizations for both tunings. Each value is the phase, in radians,
             which should be applied at the appropriate time.
         :type phases: float
@@ -859,60 +1012,10 @@ class CosmicFengine():
         else:
             load_time=int(load_time)
 
-        delay_samples = np.array(delays) * (1e-9 * clock_rate_hz)
-        delay_samples_int = np.zeros(self.delay.n_streams, dtype=int)
-        for if_id in range(self.delay.n_streams):
-            # If delay rate is positive, want to make fractional delay as small as possible,
-            # so round delay up
-            if delay_rates[if_id] > 0:
-                delay_samples_int[if_id] = int(np.ceil(delay_samples[if_id]))
-            # If delay rate is negative, we want to make fractional delay as large as possible,
-            # so round integer delay down
-            elif delay_rates[if_id]==0:
-                if delay_samples[if_id] >=0:
-                    delay_samples_int[if_id] = int(np.floor(delay_samples[if_id]))
-                else:
-                    delay_samples_int[if_id] = int(np.ceil(delay_samples[if_id]))
-            else:
-                delay_samples_int[if_id] = int(np.floor(delay_samples[if_id]))
-
-        delay_samples_frac = (delay_samples - delay_samples_int).astype(np.float)
-        # Massage rates into samples-per-spectra (lots of redundant use of clock rate...)
-        delay_rates_samples_per_sec = np.array(delay_rates) * 1e-9 * clock_rate_hz
-        delay_rates_samples_per_spec = delay_rates_samples_per_sec * (2* self.autocorr.n_chans) / clock_rate_hz
-        # Convert phases to range +/- pi and normalize
-        phases = np.array(phases) / np.pi # normalize to fractions of pi
-        phases = ((phases + 1) % 2) - 1   # place in range +/- 1
-        # Convert phase rates to fractions of pi per spectra
-        self.logger.debug("Phase rates [radians per sec]: %s" % phase_rates)
-        phase_rates_per_spec = np.array(phase_rates) * (2*self.autocorr.n_chans) / clock_rate_hz
-        self.logger.debug("Phase rates [radians per spectrum]: %s" % phase_rates_per_spec)
-        phase_rates_per_spec = phase_rates_per_spec / np.pi # normalize to fractions of pi
-        self.logger.debug("Phase rates [pis per spectrum]: %s" % phase_rates_per_spec)
-        phase_rates_per_spec = ((phase_rates_per_spec + 1) % 2) - 1        # place in range +/- 1
-        self.logger.debug("Wrapped Phase rates [pis per spectrum]: %s" % phase_rates_per_spec)
-        self.logger.debug("Setting delays to %s ns at time %s" % (delays, time.ctime(load_time)))
-        self.logger.debug("Integer sample delays: %s" % (delay_samples_int))
-        self.logger.debug("Fractional sample delays: %s" % (delay_samples_frac))
-        self.logger.debug("Phase being set to: %s" % phases)
-        self.logger.debug("Phase rates being set to: %s" % phase_rates_per_spec)
-
-        #Load the delays:
-        self.delay.disable_load() # Disable load during configuration for delay
-        self.phaserotate.disable_load() # Disable load during configuration for phaserotate
-        
-        for i in range(self.delay.n_streams):
-            self.delay.set_delay(i, delay_samples_int[i])
-            delay_frac = delay_samples_frac[i]
-            delay_rate = delay_rates_samples_per_spec[i]
-            if invert_band:
-                delay_frac = -delay_frac
-                delay_rate = -delay_rate
-
-            self.phaserotate.set_delay(i, delay_frac)
-            self.phaserotate.set_delay_rate(i, delay_rate)
-            self.phaserotate.set_phase(i, phases[i])
-            self.phaserotate.set_phase_rate(i, phase_rates_per_spec[i])
+        self.logger.debug("Setting delays at time %s" % (time.ctime(load_time)))
+        self.delay_tracking(delays, delay_rates, phases, phase_rates,clock_rate_hz,invert_band)
+       
+        #Handle the loading time/force loading of the delays
         if force_delay_load:
             self.delay.force_load()
             self.phaserotate.force_load()
