@@ -111,8 +111,6 @@ class CosmicFengine():
                 _, fpg_info = self._cfpga.transport.get_system_information_from_transport()
                 self._cfpga.get_system_information(filename=None, fpg_info=fpg_info)
             else:
-                if self.delay_tracking_thread.is_alive():
-                    self.stop_delay_tracking()
                 self._cfpga.upload_to_ram_and_program(fpgfile)
             
         if redis_host is None or redis_port is None:
@@ -944,6 +942,7 @@ class CosmicFengine():
         while True:
             #Check that delay tracking is on
             if not self.delay_switch.is_set():
+
                 break
 
             #Load the delay values from redis
