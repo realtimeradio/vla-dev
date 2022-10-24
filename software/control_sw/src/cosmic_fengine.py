@@ -111,7 +111,8 @@ class CosmicFengine():
                 _, fpg_info = self._cfpga.transport.get_system_information_from_transport()
                 self._cfpga.get_system_information(filename=None, fpg_info=fpg_info)
             else:
-                self.stop_delay_tracking()
+                if self.delay_tracking_thread.is_alive():
+                    self.stop_delay_tracking()
                 self._cfpga.upload_to_ram_and_program(fpgfile)
             
         if redis_host is None or redis_port is None:
@@ -457,7 +458,8 @@ class CosmicFengine():
         :type fpgfile: str
 
         """
-        self.stop_delay_tracking()
+        if self.delay_tracking_thread.is_alive():
+            self.stop_delay_tracking()
         if fpgfile is None:
             fpgfile = self.fpgfile
 
@@ -913,12 +915,19 @@ class CosmicFengine():
             self.phaserotate.set_phase_rate(i, phase_rates_per_spec[i])
     
     def stop_delay_tracking(self):
+        if not self.delay_tracking_thread.is_alive():
+            raise RuntimeError("Delay tracking thread was not running")
         self.delay_switch.clear()
-        self.delay_tracking_thread.join()
+        self.delay_tracking_thread.join()    
         self.delay.initialize()
         self.phaserotate.initialize()
+        self.delay_tracking_thread = threading.Thread(
+            target=self.delay_tracking, args=(), daemon=False
+        )
 
     def start_delay_tracking(self):
+        if self.delay_tracking_thread.is_alive():
+            raise RuntimeError("Delay tracking thread is already running")
         self.delay_switch.set()
         self.delay_tracking_thread.start()
 
@@ -927,7 +936,6 @@ class CosmicFengine():
         Started in a thread, this function calls on delay_tracking to update the fengine coefficients for 
         delay tracking. It reads the delay, delay rate and delay rate rate coefficients from redis
         and calculate the delay, delay rate, phase and phase rate for the F-Engine
-
         """
         DELAY_POLLING_PERIOD = 5 #s
         DELAY_LOADING_PERIOD = 1 #s
@@ -977,15 +985,10 @@ class CosmicFengine():
                         #Add calibrations:
                         delay_at_loadtime_diff_modeltime_calib = np.array(delay_at_loadtime_diff_modeltime) + delay_calib
 
-                        print(f"Delay calculated for time {loadtime_diff_modeltime}")
-                        print(f"Delay value being loaded:\n{delay_at_loadtime_diff_modeltime_calib} delay")
-                        print(f"Delay rate value being loaded:\n{delay_rate_at_loadtime_diff_modeltime} delay/ns")
-
                         #Load delays:
                         self.set_delays(delay_at_loadtime_diff_modeltime_calib, delay_rate_at_loadtime_diff_modeltime,
                                             [0,0,0,0], [0,0,0,0])
 
-                        print(f"Delay load times being set to: {onesec_future_spectra_mult_fpgaclks}")
                         self.delay.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
                         self.phaserotate.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
 
@@ -994,8 +997,6 @@ class CosmicFengine():
                 #If just doing calibration mode:
                 else:
                     #Load calibration delays:
-                    print(f"Delay value being loaded:\n{delay_calib} delay")
-                    print(f"Delay rate value being loaded:\n{[0,0,0,0]} delay/ns")
                     self.set_delays(delay_calib, [0,0,0,0], [0,0,0,0], [0,0,0,0])
                     #Force load delays:
                     self.delay.force_load()
