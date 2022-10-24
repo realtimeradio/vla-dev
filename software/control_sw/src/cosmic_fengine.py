@@ -914,7 +914,7 @@ class CosmicFengine():
     
     def stop_delay_tracking(self):
         if not self.delay_tracking_thread.is_alive():
-            logging.error(f"Delay tracking thread is stopped. Ignoring request.")
+            self.logger.error(f"Delay tracking thread is stopped. Ignoring request.")
             return 
         self.delay_switch.clear()
         self.delay_tracking_thread.join()    
@@ -926,7 +926,7 @@ class CosmicFengine():
 
     def start_delay_tracking(self):
         if self.delay_tracking_thread.is_alive():
-            logging.error(f"Delay tracking thread is running. Ignoring request.")
+            self.logger.error(f"Delay tracking thread is running. Ignoring request.")
             return
         self.delay_switch.set()
         self.delay_tracking_thread.start()
@@ -1002,12 +1002,12 @@ class CosmicFengine():
                 time.sleep(DELAY_LOADING_PERIOD) 
 
             else:
-                logging.warn("""Cosmic Fengine has no redis object instance. Cannot load delays
+                self.logger.warn("""Cosmic Fengine has no redis object instance. Cannot load delays
                 for delay tracking.""")
                 break
                 
             time.sleep(DELAY_POLLING_PERIOD)
-        logging.warn(f"While loop exited, expectedly {not self.delay_switch.is_set()}")
+        self.logger.warn(f"While loop exited, expectedly {not self.delay_switch.is_set()}")
 
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, load_time=None, clock_rate_hz=2048000000, invert_band=False):
