@@ -915,6 +915,7 @@ class CosmicFengine():
     def stop_delay_tracking(self):
         if not self.delay_tracking_thread.is_alive():
             logging.error(f"Delay tracking thread is stopped. Ignoring request.")
+            return 
         self.delay_switch.clear()
         self.delay_tracking_thread.join()    
         self.delay.initialize()
@@ -926,6 +927,7 @@ class CosmicFengine():
     def start_delay_tracking(self):
         if self.delay_tracking_thread.is_alive():
             logging.error(f"Delay tracking thread is running. Ignoring request.")
+            return
         self.delay_switch.set()
         self.delay_tracking_thread.start()
 
