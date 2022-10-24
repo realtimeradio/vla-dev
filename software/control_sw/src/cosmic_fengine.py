@@ -920,15 +920,15 @@ class CosmicFengine():
         self.delay_tracking_thread.join()    
         self.delay.initialize()
         self.phaserotate.initialize()
-        self.delay_tracking_thread = threading.Thread(
-            target=self.delay_tracking, args=(), daemon=False
-        )
 
     def start_delay_tracking(self):
         if self.delay_tracking_thread.is_alive():
             self.logger.error(f"Delay tracking thread is running. Ignoring request.")
             return
         self.delay_switch.set()
+        self.delay_tracking_thread = threading.Thread(
+            target=self.delay_tracking, args=(), daemon=False
+        )
         self.delay_tracking_thread.start()
 
     def delay_tracking(self):
