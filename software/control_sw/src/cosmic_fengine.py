@@ -753,6 +753,7 @@ class CosmicFengine():
                         except IndexError:
                             self.logger.debug('skipping channel start %d for input %d because it isnt in the feng_ids list' % (chan, ant))
                             continue
+                        chan_indices[pkt_num] += start_chan
                         ips[pkt_num] = dest_ip
                         ports[pkt_num] = dest_port
                         # Use the order maps to figure out where we should put these antchans
