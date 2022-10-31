@@ -21,7 +21,8 @@ class Delay(Block):
 
     """
     MIN_DELAY = 0 #: minimum delay allowed
-    DEFAULT_MAX_DELAY = 2**18 - 1
+    _BP = 18
+    DEFAULT_MAX_DELAY = 2**_BP - 1
     def __init__(self, host, name, n_streams=64, logger=None):
         super(Delay, self).__init__(host, name, logger)
         self.timer = TimedPulse(host, name+"_timing", logger)
@@ -135,13 +136,13 @@ class Delay(Block):
         :type stream: int
 
         :return: Currently loaded delay, in ADC samples
-        :rtype: int
+        :rtype: int, scale
 
         """
         if stream > self.n_streams:
             self._error('Tried to get delay for stream %d > n_streams (%d)' % (stream, self.n_streams))
         delay_reg = 'delay%d_loaded' % stream
-        return self.read_uint(delay_reg)
+        return self.read_uint(delay_reg), 2**self._BP
 
     def initialize(self, read_only=False):
         """
