@@ -1,8 +1,6 @@
 import logging
 import numpy as np
-import struct
 import time
-import datetime
 import os
 import redis
 import json
@@ -830,6 +828,11 @@ class CosmicFengine():
                     self.fpga.set_connected_antname(ant)
         else:
             self.fpga.set_connected_antname(None)
+        #set the redis channels on which this object listens for delay tracking (name dependant):
+        self.delay_channel_names = [
+            f"{self.fpga.get_connected_antname()}_delays",
+            f"{self.fpga.get_connected_antname()}_calibration_delays"
+        ]
 
     def set_delays(self, delays, delay_rates, phases, phase_rates, clock_rate_hz=2048000000, invert_band=False):
         """
@@ -918,7 +921,19 @@ class CosmicFengine():
             self.logger.error(f"Delay tracking thread is stopped. Ignoring request.")
             return 
         self.delay_switch.clear()
-        self.delay_tracking_thread.join()    
+        self.delay_tracking_thread.join()
+
+        #Unsubscribe to the required redis channels
+        if self.redis_obj is not None:
+            for channel in self.delay_channel_names:
+                try:
+                    self.pubsub.unsubscribe(channel) 
+                except redis.RedisError:
+                    self.logger.warn(f'Unsubscription from `{channel}` unsuccessful.')    
+        else:
+            self.logger.warn("""Cosmic Fengine has no redis object instance. No subscribed channels
+            to unsubscribe from.""")
+            return
         self.delay.initialize()
         self.phaserotate.initialize()
 
@@ -927,6 +942,20 @@ class CosmicFengine():
             self.logger.error(f"Delay tracking thread is running. Ignoring request.")
             return
         self.delay_switch.set()
+
+        #Subscribe to the required redis channels
+        if self.redis_obj is not None:
+            self.pubsub = self.redis_obj.pubsub(ignore_subscribe_messages=True)
+            for channel in self.delay_channel_names:
+                try:
+                    self.pubsub.subscribe(channel) 
+                except redis.RedisError:
+                    self.logger.error(f'Subscription to `{channel}` unsuccessful.')
+        else:
+            self.logger.warn("""Cosmic Fengine has no redis object instance. Cannot load delays
+            for delay tracking.""")
+            return
+
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
@@ -935,80 +964,76 @@ class CosmicFengine():
     def delay_tracking(self):
         """
         Started in a thread, this function calls on delay_tracking to update the fengine coefficients for 
-        delay tracking. It reads the delay, delay rate and delay rate rate coefficients from redis
-        and calculate the delay, delay rate, phase and phase rate for the F-Engine
+        delay tracking. It listens for the delay, delay rate and delay rate rate coefficients on {antname}_delays
+        channel along with calibration delay values on {antname}_calibration_delays
+        and calculates the delay, delay rate, phase and phase rate for the F-Engine before calling set_delays()
+        to load them
         """
-        DELAY_POLLING_PERIOD = 5 #s
-        DELAY_LOADING_PERIOD = 1 #s
-        PERIODS_PER_PERIOD = DELAY_POLLING_PERIOD//DELAY_LOADING_PERIOD
-        #Open the outer while loop for the redis polling:
-        while self.delay_switch.is_set():
+        #Open the outer while loop for the redis channel listener:
+        delays_initialised = False
+        calibration_delays_initialised = False
+        while True:
 
-            #Load the delay values from redis
-            if self.redis_obj is not None:
-
-                #Fetch calibration delays:
-                delay_calib = self.redis_obj.hget("META_calibrationDelays", self.fpga.get_connected_antname())
-                try:
-                    delay_calib = json.loads(delay_calib)
-                except:
-                    pass
-                delay_calib = np.fromiter(delay_calib.values(), dtype=float)
-
-                #If performing full tracking with calibrations:
-                if self.delay_track.is_set():
-                    #Fetch delay model delays
-                    delay_coeffs = self.redis_obj.hget("META_modelDelays", self.fpga.get_connected_antname())
-                    try:
-                        delay_coeffs = json.loads(delay_coeffs)
-                    except:
-                        pass
-        
-                    #Open an inner while loop of a higher cadence than the redis polling one:
-                    iteration = 0 
-                    while iteration < PERIODS_PER_PERIOD:
-                        onesec_future = (time.time() + 1)
-                        onesec_future_spectra_mult = int(onesec_future*1e6)
-                        onesec_future_spectra_mult_fpgaclks =  onesec_future_spectra_mult * 256 #in fpga clocks
-
-                        loadtime_diff_modeltime = (onesec_future_spectra_mult/(1e6) - delay_coeffs["time_value"]) #calculate 1s into the future
-                        delay_raterate = delay_coeffs["delay_raterate_nsps2"]
-                        delay_rate = delay_coeffs["delay_rate_nsps"]
-                        delay = delay_coeffs["delay_ns"]
-                        # T = ax^2 + bx + c
-                        delay_at_loadtime_diff_modeltime = [delay_raterate*(loadtime_diff_modeltime**2) + delay_rate*loadtime_diff_modeltime + delay]*self.delay.n_streams
-                        # dT/dt = 2ax + b
-                        delay_rate_at_loadtime_diff_modeltime = [delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams
-                        
-                        #Add calibrations:
-                        delay_at_loadtime_diff_modeltime_calib = np.array(delay_at_loadtime_diff_modeltime) + delay_calib
-
-                        #Load delays:
-                        self.set_delays(delay_at_loadtime_diff_modeltime_calib, delay_rate_at_loadtime_diff_modeltime,
-                                            [0,0,0,0], [0,0,0,0])
-
-                        self.delay.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
-                        self.phaserotate.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
-
-                        iteration += 1
-                
-                #If just doing calibration mode:
-                else:
-                    #Load calibration delays:
-                    self.set_delays(delay_calib, [0,0,0,0], [0,0,0,0], [0,0,0,0])
-                    #Force load delays:
-                    self.delay.force_load()
-                    self.phaserotate.force_load()
-
-                time.sleep(DELAY_LOADING_PERIOD) 
-
-            else:
-                self.logger.warn("""Cosmic Fengine has no redis object instance. Cannot load delays
-                for delay tracking.""")
+            if not self.delay_switch.is_set():
                 break
-                
-            time.sleep(DELAY_POLLING_PERIOD)
-        self.logger.warn(f"While loop exited, expectedly {not self.delay_switch.is_set()}")
+
+            #Fetch message from subscribed channels
+            message = self.pubsub.get_message(timeout=0.1)
+
+            try:
+                if message:
+                    if "message" == message["type"]:
+                        #New delay values received
+                        message_data = json.loads(message.get('data'))
+                        if self.delay_channel_names[0] == message['channel']:
+                            #This is a delay value
+                            delay_coeffs = message_data
+                            if not delays_initialised:
+                                delays_initialised = True
+                        if self.delay_channel_names[1] == message['channel']:
+                            #This is a calibration delay value
+                            delay_calib = np.fromiter(message_data.values(),dtype=float)
+                            if not calibration_delays_initialised:
+                                calibration_delays_initialised = True
+
+                else:
+                    #No values received, load values on hand
+                    onesec_future = (time.time() + 1)
+                    onesec_future_spectra_mult = int(onesec_future*1e6)
+                    onesec_future_spectra_mult_fpgaclks =  onesec_future_spectra_mult * 256 #in fpga clocks
+                    
+                    if self.delay_track.is_set():
+                        if delays_initialised and calibration_delays_initialised:
+                            loadtime_diff_modeltime = (onesec_future_spectra_mult/(1e6) - delay_coeffs["time_value"]) #calculate 1s into the future
+                            delay_raterate = delay_coeffs["delay_raterate_nsps2"]
+                            delay_rate = delay_coeffs["delay_rate_nsps"]
+                            delay = delay_coeffs["delay_ns"]
+                            # T = ax^2 + bx + c
+                            delay_at_loadtime_diff_modeltime = [delay_raterate*(loadtime_diff_modeltime**2) + delay_rate*loadtime_diff_modeltime + delay]*self.delay.n_streams
+                            # dT/dt = 2ax + b
+                            delay_rate_at_loadtime_diff_modeltime = [delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams
+                            
+                            #Add calibrations:
+                            delay_at_loadtime_diff_modeltime_calib = np.array(delay_at_loadtime_diff_modeltime) + delay_calib
+
+                            #Load delays:
+                            self.set_delays(delay_at_loadtime_diff_modeltime_calib, delay_rate_at_loadtime_diff_modeltime,
+                                                [0,0,0,0], [0,0,0,0])
+
+                    else:
+                        if calibration_delays_initialised:
+                            #Load calibration delays:
+                            self.set_delays(delay_calib, [0,0,0,0], [0,0,0,0], [0,0,0,0])
+
+                    assert time.time() < onesec_future, "Error, target load time cannot be set for a time in the past!"
+                    #Load one second into the future:
+                    self.delay.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
+                    self.phaserotate.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
+                    time.sleep(1) #account for the 1s into the future loading
+
+            except BaseException as err:
+                print(repr(err))
+                break
 
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, load_time=None, clock_rate_hz=2048000000, invert_band=False):
