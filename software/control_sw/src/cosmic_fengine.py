@@ -998,13 +998,12 @@ class CosmicFengine():
 
                 else:
                     #No values received, load values on hand
-                    onesec_future = (time.time() + 1)
-                    onesec_future_spectra_mult = int(onesec_future*1e6)
-                    onesec_future_spectra_mult_fpgaclks =  onesec_future_spectra_mult * 256 #in fpga clocks
+                    onesec_future_integer = int(time.time() + 1) #1 second into the future
+                    onesec_future_spectra_mult_fpgaclks =  int(onesec_future_integer * 256e6) #in fpga clocks per spectra
                     
                     if self.delay_track.is_set():
                         if delays_initialised and calibration_delays_initialised:
-                            loadtime_diff_modeltime = (onesec_future_spectra_mult/(1e6) - delay_coeffs["time_value"]) #calculate 1s into the future
+                            loadtime_diff_modeltime = (onesec_future_integer - delay_coeffs["time_value"]) #calculate 1s into the future
                             delay_raterate = delay_coeffs["delay_raterate_nsps2"]
                             delay_rate = delay_coeffs["delay_rate_nsps"]
                             delay = delay_coeffs["delay_ns"]
@@ -1025,11 +1024,11 @@ class CosmicFengine():
                             #Load calibration delays:
                             self.set_delays(delay_calib, [0,0,0,0], [0,0,0,0], [0,0,0,0])
 
-                    assert time.time() < onesec_future, "Error, target load time cannot be set for a time in the past!"
+                    assert time.time() < onesec_future_integer, "Error, target load time cannot be set for a time in the past!"
                     #Load one second into the future:
                     self.delay.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
                     self.phaserotate.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
-                    time.sleep(1) #account for the 1s into the future loading
+                    time.sleep(onesec_future_integer - time.time()) #sleep for the difference between load time and now (to allow for loading)
 
             except BaseException as err:
                 print(repr(err))
