@@ -1013,7 +1013,7 @@ class CosmicFengine():
                 else:
                     #No values received, load values on hand
                     onesec_future_integer = int(time.time() + 1) #1 second into the future
-                    onesec_future_spectra_mult_fpgaclks =  int(onesec_future_integer * 256e6) #in fpga clocks per spectra
+                    onesec_future_spectra_mult_fpgaclks =  int(onesec_future_integer * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
                     
                     if self.delay_track.is_set():
                         if delays_initialised and calibration_delays_initialised:
@@ -1097,8 +1097,8 @@ class CosmicFengine():
         else:
             print("Loading delays...")
             assert load_time > time.time(), f"""Cannot set a load time that is in the past"""   
-            self.delay.set_target_load_time(int(load_time*256e6))
-            self.phaserotate.set_target_load_time(int(load_time*256e6))
+            self.delay.set_target_load_time(int(load_time * FPGA_CLOCK_RATE_HZ))
+            self.phaserotate.set_target_load_time(int(load_time * FPGA_CLOCK_RATE_HZ))
             self.logger.debug(f"""Firmware reports that coarse delays will be loaded in: 
                                 {self.delay.get_time_to_load()} FPGA clocks
                                 and fine delays in:
