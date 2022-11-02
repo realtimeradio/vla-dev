@@ -1084,8 +1084,8 @@ class CosmicFengine():
         else:
             print("Loading delays...")
             assert load_time > time.time(), f"""Cannot set a load time that is in the past"""   
-            self.delay.set_target_load_time(load_time)
-            self.phaserotate.set_target_load_time(load_time)
+            self.delay.set_target_load_time(int(load_time*256e6))
+            self.phaserotate.set_target_load_time(int(load_time*256e6))
             self.logger.debug(f"""Firmware reports that coarse delays will be loaded in: 
                                 {self.delay.get_time_to_load()} FPGA clocks
                                 and fine delays in:
