@@ -80,6 +80,7 @@ class Fpga(Block):
     def set_connected_antname(self, antname):
         """
         Set the connected antenna name.
+        
         :param antname: The antenna name.
         :type antname: str
         """
@@ -88,6 +89,9 @@ class Fpga(Block):
     def get_connected_antname(self):
         """
         Fetch the connected antenna name.
+
+        :return self.antname: The name of the connected antennna.
+        :rtype str:
         """
         return self.antname
 
