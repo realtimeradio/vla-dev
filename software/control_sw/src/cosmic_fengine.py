@@ -836,24 +836,25 @@ class CosmicFengine():
 
     def set_delays(self, delays, delay_rates, phases, phase_rates, clock_rate_hz=2048000000, invert_band=False):
         """
-        Set this F-engine to track a given delay curve.
+        Transform the argument delays, delay rates, phases and phase rates before uploading them to the F-Engine.
         :param delays: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
             the delay, in nanoseconds, which should be applied at the appropriate time.
             Whole ADC sample delays are implemented using a coarse delay, while sub-sample
             delays are implemented as a post-FFT phase rotation.
-        :type delays: float
+        :type delays: list{float}
         :param delay_rates: 4-tuple of delay rates for X and Y polarizations for both tunings. Each value is
-            the delay rate, in nanoseconds per second. The incremental delay
+            the delay rate, in nanoseconds per second. This is the incremental delay
             which should be added to the current delay each second.
             Internally, delay rate is converted from nanoseconds-per-second to
             samples-per-spectra. Firmware delays are updated every 4 spectra.
-        :type delay_rates: float
-        :param delay_rate_rates: 4-tuple of delay rate rates for X and Y polarizations for both tunings. Each value is
-            the delay rate rate, in nanoseconds per second^2. The incremental delay
-            which should be added to the current delay each second.
-            Internally, delay rate rate is converted from nanoseconds-per-second^2 to
-            samples-per-spectra. Firmware delays are updated every 4 spectra.
-        :type delay_rate_rates: float
+        :type delay_rates: list{float}
+        :param phases: 4-tuple of phases for X and Y polarizations for both tunings. Each value is
+            the phase, in radians. 
+        :type phases: list{float}
+        :param phase_rates: 4-tuple of phase_rates for X and Y polarizations for both tunings. Each value is
+            the rate of change of phase, in radians per second. This is the incremental phase
+            which should be added to the current phase each second.
+        :type phase_rates: list{float}
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
@@ -917,6 +918,12 @@ class CosmicFengine():
             self.phaserotate.set_phase_rate(i, phase_rates_per_spec[i])
     
     def stop_delay_tracking(self):
+        """
+        End the thread running `delay_tracking` if the thread is alive. Otherwise ignore.
+        In addition to just ending the thread, this function unsubscribes from the 
+        redis channels that are listened to for delays and calibration delays when the thread
+        is running. Furthermore, the `delay` and `phaserotate` blocks are re-initialised.
+        """
         if not self.delay_tracking_thread.is_alive():
             self.logger.error(f"Delay tracking thread is stopped. Ignoring request.")
             return 
@@ -938,6 +945,12 @@ class CosmicFengine():
         self.phaserotate.initialize()
 
     def start_delay_tracking(self):
+        """
+        Start the thread running `delay_tracking` if the thread is dead. Otherwise ignore.
+        In addition to just starting the thread, this function subscribes to the redis 
+        channels on which the delays and the calibration delays are broadcast so that 
+        the thread may receive these values.
+        """
         if self.delay_tracking_thread.is_alive():
             self.logger.error(f"Delay tracking thread is running. Ignoring request.")
             return
@@ -963,11 +976,13 @@ class CosmicFengine():
 
     def delay_tracking(self):
         """
-        Started in a thread, this function calls on delay_tracking to update the fengine coefficients for 
-        delay tracking. It listens for the delay, delay rate and delay rate rate coefficients on {antname}_delays
-        channel along with calibration delay values on {antname}_calibration_delays
-        and calculates the delay, delay rate, phase and phase rate for the F-Engine before calling set_delays()
-        to load them
+        Started in a thread, this function calls on `set_delays` to update the F-Engine coefficients for 
+        delay tracking. 
+        This function listens for delay, delay_rate and delay_rate_rate coefficient updates 
+        along with calibration delay value updates on the channels subscribed to in `start_delay_tracking`.
+        In between receiving coefficient updates, when delay_track is set this function will interpolate new delay, delay_rate,
+        phase and phase_rate values to upload to the F-Engine. When delay_track is cleared, this function will continuously 
+        load the calibration delays to the F-Engine.
         """
         #Open the outer while loop for the redis channel listener:
         delays_initialised = False
@@ -1037,29 +1052,28 @@ class CosmicFengine():
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, load_time=None, clock_rate_hz=2048000000, invert_band=False):
         """
-        Set the delay tracking for this F-Engine once.
+        Set the delays for this F-Engine once. If no load_time is provided, delays are uploaded to the
+        F-Engine immediately.
         :param delays: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
             the delay, in nanoseconds, which should be applied at the appropriate time.
             Whole ADC sample delays are implemented using a coarse delay, while sub-sample
             delays are implemented as a post-FFT phase rotation.
-        :type delays: float
+        :type delays: list{float}
         :param delay_rates: 4-tuple of delay rates for X and Y polarizations for both tunings. Each value is
-            the delay rate, in nanoseconds per second. The incremental delay
+            the delay rate, in nanoseconds per second. This is the incremental delay
             which should be added to the current delay each second.
             Internally, delay rate is converted from nanoseconds-per-second to
             samples-per-spectra. Firmware delays are updated every 4 spectra.
-        :type delay_rates: float
-        :param phases: 4-tuple of phases for X and Y polarizations for both tunings. Each value is the phase, in radians,
-            which should be applied at the appropriate time.
-        :type phases: float
-        :param phase_rates: 4-tuple of phase rates for X and Y polarizations for both tunings. Each value is the
-            phase rate, in radians per second. This is the incremental phase which should be added
-            to the current phase every second.
-            Internally, phase rate is converted from radians-per-second to radians-per-spectra. 
-            Firmware phases are updated every 4 spectra.
-        :type phase_rates: float
-        :param load_time: Unix time at which delay should be applied. If None, delays are 
-            force-loaded (testing purposes).
+        :type delay_rates: list{float}
+        :param phases: 4-tuple of phases for X and Y polarizations for both tunings. Each value is
+            the phase, in radians. 
+        :type phases: list{float}
+        :param phase_rates: 4-tuple of phase_rates for X and Y polarizations for both tunings. Each value is
+            the rate of change of phase, in radians per second. This is the incremental phase
+            which should be added to the current phase each second.
+        :type phase_rates: list{float}
+        :param load_time: a unix time in seconds at which to load the delay values provided to the 
+        F-Engine. 
         :type load_time: float
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
