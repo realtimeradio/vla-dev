@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--program', '-p', action='store_true',
         help='Program the PCI devices with fpgfile.'
     )
-    parser.add_argument('--redis-host', type=str, default='cosmic-head',
+    parser.add_argument('--redis-host', type=str, default='redishost',
         help='Redis server host address.'
     )
     parser.add_argument('--redis-port', type=int, default=6379,
