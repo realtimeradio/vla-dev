@@ -77,6 +77,24 @@ class Fpga(Block):
         t = self.read_uint('version_timestamp')
         return t
 
+    def set_connected_antname(self, antname):
+        """
+        Set the connected antenna name.
+        
+        :param antname: The antenna name.
+        :type antname: str
+        """
+        self.antname = antname
+
+    def get_connected_antname(self):
+        """
+        Fetch the connected antenna name.
+
+        :return self.antname: The name of the connected antennna.
+        :rtype str:
+        """
+        return self.antname
+
     def is_programmed(self):
         """
         Lazy check to see if a board is programmed.
@@ -106,6 +124,8 @@ class Fpga(Block):
             - timestamp (str) : The current time, as an ISO format string.
 
             - host (str) : The host name of this board.
+
+            - antname (str) : The name of the antenna connected to this board.
 
             - sw_version (str) : The version string of the control software
               package. Flagged as warning if the version indicates a build
@@ -157,6 +177,7 @@ class Fpga(Block):
         stats['programmed'] = self.is_programmed()
         stats['timestamp'] = datetime.datetime.now().isoformat()
         stats['host'] = '%s:%s' % (self.server_hostname, self.host.host)
+        stats['antname'] = self.antname
         stats['sw_version'] = __version__
         if stats['programmed']:
             stats['fw_version'] = self.get_firmware_version()
