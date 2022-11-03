@@ -95,6 +95,22 @@ class TimedPulse(Block):
             v -= 2**64
         return v
 
+    def get_fpga_time(self, fpga_clock_rate_hz=None):
+        """
+        Get the current FPGA time in FPGA clocks. If
+        fpga_clock_rate_hz is provided, return time as a
+        date-time string.
+
+        :param fpga_clock_rate_hz: The FPGA clock rate in Hz
+        :type fpga_clock_rate_hz: float
+
+        :return: telescope_time
+        :rtype: int | str
+        """
+
+        fpga_clk_difference = self.get_target_tt() - self.get_time_to_load()
+        return fpga_clk_difference if fpga_clock_rate_hz is None else time.ctime(fpga_clk_difference/fpga_clock_rate_hz)
+
     def get_force_state(self):
         """
         Get the state of the "force_pulse" control flag.
