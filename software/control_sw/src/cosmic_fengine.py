@@ -311,6 +311,10 @@ class CosmicFengine():
         :param allow_unlocked_dts: If True, do not initialize the dts block
         :type allow_unlocked_dts: bool
         """
+        if not read_only:
+            #kill delay_tracking thread
+            self.stop_delay_tracking()
+
         for blockname, b in self.blocks.items():
             if (blockname == 'dts' and allow_unlocked_dts):
                 self.logger.info("Parameter allow_unlocked_dts = True, won't initialize %s" % blockname)
