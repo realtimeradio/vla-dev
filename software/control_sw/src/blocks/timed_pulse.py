@@ -61,7 +61,7 @@ class TimedPulse(Block):
         assert tt < 2**64
         assert tt >= 0
         self.write_int('target_load_time_msb', tt >> 32)
-        self.write_int('tartget_load_time_lsb', tt & 0xffffffff)
+        self.write_int('target_load_time_lsb', tt & 0xffffffff)
         if enable_trig:
             self.enable_tt_pulse()
         else:
@@ -95,6 +95,22 @@ class TimedPulse(Block):
             v -= 2**64
         return v
 
+    def get_fpga_time(self, fpga_clock_rate_hz=None):
+        """
+        Get the current FPGA time in FPGA clocks. If
+        fpga_clock_rate_hz is provided, return time as a
+        date-time string.
+
+        :param fpga_clock_rate_hz: The FPGA clock rate in Hz
+        :type fpga_clock_rate_hz: float
+
+        :return: telescope_time
+        :rtype: int | str
+        """
+
+        fpga_clk_difference = self.get_target_tt() - self.get_time_to_load()
+        return fpga_clk_difference if fpga_clock_rate_hz is None else time.ctime(fpga_clk_difference/fpga_clock_rate_hz)
+
     def get_force_state(self):
         """
         Get the state of the "force_pulse" control flag.
@@ -124,6 +140,8 @@ class TimedPulse(Block):
 
             - time_to_load (int) : Currently reported time until load, in FPGA clocks.
 
+            - fpga_time (str) : The FPGA telescope time as a date-time string.
+
             - is_enabled (bool) : The enable state of the triggered sync logic
 
             - is_forced (bool) : The state of the force load flag
@@ -138,6 +156,7 @@ class TimedPulse(Block):
         flags = {}
         stats['target_load_time'] = self.get_target_tt()
         stats['time_to_load'] = self.get_time_to_load()
+        stats['fpga_time'] = self.get_fpga_time(fpga_clock_rate_hz=256e6)
         stats['is_enabled'] = self.get_enable_state()
         stats['is_forced'] = self.get_force_state()
         if stats['is_forced']:

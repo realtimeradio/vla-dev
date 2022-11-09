@@ -56,12 +56,18 @@ if __name__ == '__main__':
     parser.add_argument('--program', '-p', action='store_true',
         help='Program the PCI devices with fpgfile.'
     )
+    parser.add_argument('--redis-host', type=str, default='redishost',
+        help='Redis server host address.'
+    )
+    parser.add_argument('--redis-port', type=int, default=6379,
+        help='Redis server host port.'
+    )
     args = parser.parse_args()
 
     PCIE_XDMA_DICT = LocalPcieTransport.get_pcie_xdma_map()
 
-    if 'PCIE_BLACKLIST' in os.environ:
-        for pcie_dev in os.environ['PCIE_BLACKLIST'].split(','):
+    if 'PCIE_IGNORE' in os.environ:
+        for pcie_dev in os.environ['PCIE_IGNORE'].split(','):
             PCIE_XDMA_DICT.pop(pcie_dev)
 
     for (pcie_id, xdma_id) in PCIE_XDMA_DICT.items():
@@ -72,7 +78,9 @@ if __name__ == '__main__':
                 {# __init__ args
                     'host': pcie_id_string,
                     'fpgfile': args.fpgfile,
-                    'pipeline_id': pipeline_id
+                    'pipeline_id': pipeline_id,
+                    'redis_host': args.redis_host,
+                    'redis_port': args.redis_port,
                 }
             )
             object_id = f'{pcie_id_string}_{pipeline_id}'
