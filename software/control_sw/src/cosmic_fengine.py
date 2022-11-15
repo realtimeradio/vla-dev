@@ -1130,12 +1130,12 @@ class CosmicFengine():
 
                 else:
                     #No values received, load values on hand
-                    onesec_future_integer = int(time.time() + 1) #1 second into the future
-                    onesec_future_spectra_mult_fpgaclks =  int(onesec_future_integer * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
-
+                    one_decisec_future_spectra_mult_fpgaclks =  int((time.time() + 1e-1) * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra - 1 decisecond into the future
+                    one_decisec_future_seconds = one_decisec_future_spectra_mult_fpgaclks / FPGA_CLOCK_RATE_HZ
+                    
                     if self.delay_track.is_set():
                         if delay_coeffs is not None:
-                            loadtime_diff_modeltime = (onesec_future_integer - delay_coeffs["time_value"]) #calculate 1s into the future
+                            loadtime_diff_modeltime = (one_decisec_future_seconds - delay_coeffs["time_value"]) #calculate 1s into the future
                             delay_raterate = delay_coeffs["delay_raterate_nsps2"]
                             delay_rate = delay_coeffs["delay_rate_nsps"]
                             delay = delay_coeffs["delay_ns"]
@@ -1165,10 +1165,10 @@ class CosmicFengine():
                         #Load delays:
                         self.set_delays()
 
-                    assert time.time() < onesec_future_integer, "Error, target load time cannot be set for a time in the past!"
-                    self.delay.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
-                    self.phaserotate.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
-                    time.sleep(onesec_future_integer - time.time()) #sleep for the difference between load time and now (to allow for loading)
+                    assert time.time() < one_decisec_future_seconds, "Error, target load time cannot be set for a time in the past!"
+                    self.delay.set_target_load_time(one_decisec_future_spectra_mult_fpgaclks)
+                    self.phaserotate.set_target_load_time(one_decisec_future_spectra_mult_fpgaclks)
+                    time.sleep(one_decisec_future_seconds - time.time()) #sleep for the difference between load time and now (to allow for loading)
 
             except BaseException as err:
                 print(repr(err))
