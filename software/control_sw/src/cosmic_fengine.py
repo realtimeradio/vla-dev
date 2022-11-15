@@ -115,11 +115,15 @@ class CosmicFengine():
         else:
             self.redis_obj = redis.Redis(host = redis_host, port = redis_port, decode_responses=True)
 
-        #Thread stuff
+        #Thread init stuff
         self.delay_switch = threading.Event()
         self.delay_track = threading.Event()
+        self.delay_monitor = threading.Event()
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
+        )
+        self.delay_monitoring_thread = threading.Thread(
+            target=self.monitor_delay_tracking, args=(), daemon=False
         )
 
         self.blocks = {}
@@ -314,6 +318,7 @@ class CosmicFengine():
         if not read_only:
             #kill delay_tracking thread
             self.stop_delay_tracking()
+            self.stop_delay_monitoring()
 
         for blockname, b in self.blocks.items():
             if (blockname == 'dts' and allow_unlocked_dts):
@@ -459,6 +464,7 @@ class CosmicFengine():
         """
         if self.delay_tracking_thread.is_alive():
             self.stop_delay_tracking()
+            self.stop_delay_monitoring()
         if fpgfile is None:
             fpgfile = self.fpgfile
 
@@ -834,30 +840,16 @@ class CosmicFengine():
         #set the redis channels on which this object listens for delay tracking (name dependant):
         self.delay_channel_names = [
             f"{self.fpga.get_connected_antname()}_delays",
-            f"{self.fpga.get_connected_antname()}_calibration_delays"
-        ]
+            "update_calibration_delays"]
 
-    def set_delays(self, delays, delay_rates, phases, phase_rates, clock_rate_hz=2048000000, invert_band=False):
+    def set_delays(self, clock_rate_hz=2048000000, invert_band=False):
         """
-        Transform the argument delays, delay rates, phases and phase rates before uploading them to the F-Engine.
+        Transform the object property delays, delay rates, phases and phase rates before uploading them to the F-Engine.
+        The delays are in ns, the delay rates in ns/s, the phase in radians and the phase rate in radians/s.
         :param delays: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
             the delay, in nanoseconds, which should be applied at the appropriate time.
             Whole ADC sample delays are implemented using a coarse delay, while sub-sample
             delays are implemented as a post-FFT phase rotation.
-        :type delays: list{float}
-        :param delay_rates: 4-tuple of delay rates for X and Y polarizations for both tunings. Each value is
-            the delay rate, in nanoseconds per second. This is the incremental delay
-            which should be added to the current delay each second.
-            Internally, delay rate is converted from nanoseconds-per-second to
-            samples-per-spectra. Firmware delays are updated every 4 spectra.
-        :type delay_rates: list{float}
-        :param phases: 4-tuple of phases for X and Y polarizations for both tunings. Each value is
-            the phase, in radians. 
-        :type phases: list{float}
-        :param phase_rates: 4-tuple of phase_rates for X and Y polarizations for both tunings. Each value is
-            the rate of change of phase, in radians per second. This is the incremental phase
-            which should be added to the current phase each second.
-        :type phase_rates: list{float}
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
@@ -865,16 +857,16 @@ class CosmicFengine():
             apply a fractional delay which is the negative of the physical delay.
         :type invert_band: bool
         """
-        delay_samples = np.array(delays) * (1e-9 * clock_rate_hz)
+        delay_samples = self.delay_to_load * (1e-9 * clock_rate_hz)
         delay_samples_int = np.zeros(self.delay.n_streams, dtype=int)
         for if_id in range(self.delay.n_streams):
             # If delay rate is positive, want to make fractional delay as small as possible,
             # so round delay up
-            if delay_rates[if_id] > 0:
+            if self.delay_rate_to_load[if_id] > 0:
                 delay_samples_int[if_id] = int(np.ceil(delay_samples[if_id]))
             # If delay rate is negative, we want to make fractional delay as large as possible,
             # so round integer delay down
-            elif delay_rates[if_id]==0:
+            elif self.delay_rate_to_load[if_id]==0:
                 if delay_samples[if_id] >=0:
                     delay_samples_int[if_id] = int(np.floor(delay_samples[if_id]))
                 else:
@@ -884,15 +876,14 @@ class CosmicFengine():
 
         delay_samples_frac = (delay_samples - delay_samples_int).astype(np.float)
         # Massage rates into samples-per-spectra (lots of redundant use of clock rate...)
-        delay_rates_samples_per_sec = np.array(delay_rates) * 1e-9 * clock_rate_hz
-        delay_rates_samples_per_spec = delay_rates_samples_per_sec * (2* self.autocorr.n_chans) / clock_rate_hz
+        delay_rates_samples_per_spec = self.delay_rate_to_load * 1e-9 * (2* self.autocorr.n_chans)
         # Convert phases to range +/- pi and normalize
-        phases = np.array(phases) / np.pi # normalize to fractions of pi
+        phases = self.phase_to_load / np.pi # normalize to fractions of pi
         phases = ((phases + 1) % 2) - 1   # place in range +/- 1
 
         # Convert phase rates to fractions of pi per spectra
-        self.logger.debug("Phase rates [radians per sec]: %s" % phase_rates)
-        phase_rates_per_spec = np.array(phase_rates) * (2*self.autocorr.n_chans) / clock_rate_hz
+        self.logger.debug("Phase rates [radians per sec]: %s" % self.phase_rate_to_load)
+        phase_rates_per_spec = self.phase_rate_to_load * (2*self.autocorr.n_chans) / clock_rate_hz
         self.logger.debug("Phase rates [radians per spectrum]: %s" % phase_rates_per_spec)
         phase_rates_per_spec = phase_rates_per_spec / np.pi # normalize to fractions of pi
         self.logger.debug("Phase rates [pis per spectrum]: %s" % phase_rates_per_spec)
@@ -920,16 +911,106 @@ class CosmicFengine():
             self.phaserotate.set_phase(i, phases[i])
             self.phaserotate.set_phase_rate(i, phase_rates_per_spec[i])
     
+    def monitor_delay_tracking(self):
+        """
+        From the delay and delay rate values for this fengine instance, calculate an expected delay
+        slope value for a given time. 
+        For that time interval, assert that the firmware reported delay slope matches the
+        expected.
+        This function runs in a thread and polls the time_to_load(). When it is negative, it means
+        that the delay values have been loaded, and that it is time to check the firmware
+        reported slope/phase against the object property delay, delay rate, phase and phase rate.
+        Publish an informative dictionary to FPGA_delayStatus for logging purposes.
+        """
+        #initialisation:
+        exp_delay = np.zeros(self.delay.n_streams, dtype=float)
+        exp_phase = np.zeros(self.delay.n_streams, dtype=float)
+        firm_delay = np.zeros(self.delay.n_streams, dtype=float)
+        firm_phase = np.zeros(self.delay.n_streams, dtype=float)
+
+        dict_to_pub = {
+                        "on":None,
+                        "tracking":None,
+                        "expected_delay":None,
+                        "expected_phase":None,
+                        "firmware_delay":None,
+                        "firmware_phase":None,
+                        "delay_correct":None,
+                        "phase_correct":None,
+                        "time_since_load_sec":None,
+                    }
+
+        while True:
+            if not self.delay_monitor.is_set():
+                break
+
+            time_since_load = -1.0 * self.phaserotate.get_time_to_load() / 256e6 # fpga_clks -> s
+
+            if time_since_load >= 0.0:
+                #we only check delays if we know they've been loaded
+                for stream in range(self.phaserotate.n_streams):
+                    
+                    #fetch the firmware reported slope and delay (samples):
+                    slope, scale = self.phaserotate.get_firmware_slope(stream)
+                    phase, scale = self.phaserotate.get_firmware_phase(stream)
+                    firm_phase[stream] = phase/scale
+                    firm_delay[stream] = (-1.0 * slope/scale) + self.delay.get_delay(stream)
+
+                #calculate the expected slope for the time retrieved (ns):
+                if self.delay_switch.is_set():
+                    try:
+                        exp_delay = (
+                            self.delay_to_load + self.delay_rate_to_load * time_since_load
+                            ) * 1e-9 * 2048e6
+                    except AttributeError:
+                        exp_delay[:] = np.NaN
+                else:
+                    self.logger.info("Delay tracking not started. No received values as yet")
+                    exp_delay[:] = np.NaN
+
+                dict_to_pub["on"] = self.delay_switch.is_set()
+                dict_to_pub["tracking"] = self.delay_track.is_set()
+                dict_to_pub["expected_delay"] = exp_delay.tolist() 
+                dict_to_pub["expected_phase"] = exp_phase.tolist()
+                dict_to_pub["firmware_delay"] = firm_delay.tolist()
+                dict_to_pub["firmware_phase"] = firm_phase.tolist()
+                dict_to_pub["delay_correct"] = np.isclose(exp_delay,firm_delay,atol=1e-2).tolist()
+                dict_to_pub["phase_correct"] = np.isclose(exp_phase,firm_phase,atol=1e-2).tolist()
+                dict_to_pub["time_since_load_sec"] = time_since_load
+
+                self.redis_obj.hset(
+                    "FPGA_delayStatus",
+                    f"{self.fpga.get_connected_antname()}",
+                    json.dumps(dict_to_pub)
+                    )
+                #sleep for a longer period since we've already checked loaded delays
+                time.sleep(0.5)
+            else:
+                #sleep for a very small period as we're waiting till delays are loaded
+                time.sleep(1e-2)
+    
+    def stop_delay_monitoring(self):
+        """
+        End the thread running `delay_monitoring` if the thread is alive. Otherwise ignore.
+        In addition to just ending the thread.
+        """
+        if not self.delay_monitoring_thread.is_alive():
+            self.logger.error(f"Delay monitoring thread is stopped. Ignoring request.")
+            return
+            
+        self.delay_monitor.clear()
+        self.delay_monitoring_thread.join()
+
     def stop_delay_tracking(self):
         """
         End the thread running `delay_tracking` if the thread is alive. Otherwise ignore.
         In addition to just ending the thread, this function unsubscribes from the 
-        redis channels that are listened to for delays and calibration delays when the thread
+        redis channels that are listened to for delays when the thread
         is running. Furthermore, the `delay` and `phaserotate` blocks are re-initialised.
         """
         if not self.delay_tracking_thread.is_alive():
             self.logger.error(f"Delay tracking thread is stopped. Ignoring request.")
-            return 
+            return
         self.delay_switch.clear()
         self.delay_tracking_thread.join()
 
@@ -947,12 +1028,32 @@ class CosmicFengine():
         self.delay.initialize()
         self.phaserotate.initialize()
 
+        #initialise the delay and delay rate numpy arrays:
+        self.delay_to_load = np.zeros(self.phaserotate.n_streams, dtype=float)
+        self.delay_rate_to_load = np.zeros(self.phaserotate.n_streams, dtype=float)
+        self.phase_to_load = np.zeros(self.phaserotate.n_streams, dtype=float)
+        self.phase_rate_to_load = np.zeros(self.phaserotate.n_streams, dtype=float)
+
+    def start_delay_monitoring(self):
+        """
+        Start the thread running `delay_monitoring` if the thread is dead. Otherwise ignore.
+        """
+        if self.delay_monitoring_thread.is_alive():
+            self.logger.error(f"Delay monitoring thread is running. Ignoring request.")
+            return
+        self.delay_monitor.set()
+
+        self.delay_monitoring_thread = threading.Thread(
+            target=self.monitor_delay_tracking, args=(), daemon=False
+        )
+        self.delay_monitoring_thread.start()
+
     def start_delay_tracking(self):
         """
         Start the thread running `delay_tracking` if the thread is dead. Otherwise ignore.
         In addition to just starting the thread, this function subscribes to the redis 
-        channels on which the delays and the calibration delays are broadcast so that 
-        the thread may receive these values.
+        channels on which the geometric delays are broadcast and on which the thread is notified
+        of calibration delay updates in META_calibrationDelays hash.
         """
         if self.delay_tracking_thread.is_alive():
             self.logger.error(f"Delay tracking thread is running. Ignoring request.")
@@ -975,6 +1076,13 @@ class CosmicFengine():
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
+
+        #initialise the delay and delay rate numpy arrays:
+        self.delay_to_load = np.zeros(self.phaserotate.n_streams, dtype=float)
+        self.delay_rate_to_load = np.zeros(self.phaserotate.n_streams, dtype=float)
+        self.phase_to_load = np.zeros(self.phaserotate.n_streams, dtype=float)
+        self.phase_rate_to_load = np.zeros(self.phaserotate.n_streams, dtype=float)
+
         self.delay_tracking_thread.start()
 
     def delay_tracking(self):
@@ -982,16 +1090,23 @@ class CosmicFengine():
         Started in a thread, this function calls on `set_delays` to update the F-Engine coefficients for 
         delay tracking. 
         This function listens for delay, delay_rate and delay_rate_rate coefficient updates 
-        along with calibration delay value updates on the channels subscribed to in `start_delay_tracking`.
+        on the channels subscribed to in `start_delay_tracking` and initialises calibration delays from META_calibrationDelays hash.
         In between receiving coefficient updates, when delay_track is set this function will interpolate new delay, delay_rate,
         phase and phase_rate values to upload to the F-Engine. When delay_track is cleared, this function will continuously 
         load the calibration delays to the F-Engine.
         """
-        #Open the outer while loop for the redis channel listener:
-        delays_initialised = False
-        calibration_delays_initialised = False
-        while True:
+        #Initialise:
+        delay_coeffs = None
+        try:
+            delay_calib = np.fromiter(json.loads(self.redis_obj.hget
+                                ("META_calibrationDelays", f"{self.fpga.get_connected_antname()}"
+                                )).values(),dtype=float)
+        except BaseException:
+            self.logger.error("Unable to load calibration delays from 'META_calibrationDelays', aborting thread...")
+            return
 
+        #Open the outer while loop for the redis channel listener:
+        while True:
             if not self.delay_switch.is_set():
                 break
 
@@ -1006,44 +1121,51 @@ class CosmicFengine():
                         if self.delay_channel_names[0] == message['channel']:
                             #This is a delay value
                             delay_coeffs = message_data
-                            if not delays_initialised:
-                                delays_initialised = True
                         if self.delay_channel_names[1] == message['channel']:
-                            #This is a calibration delay value
-                            delay_calib = np.fromiter(message_data.values(),dtype=float)
-                            if not calibration_delays_initialised:
-                                calibration_delays_initialised = True
+                            #Need to update delay calibration values
+                            if message_data:
+                                delay_calib = np.fromiter(json.loads(self.redis_obj.hget
+                                ("META_calibrationDelays", f"{self.fpga.get_connected_antname()}"
+                                )).values(),dtype=float)
 
                 else:
                     #No values received, load values on hand
                     onesec_future_integer = int(time.time() + 1) #1 second into the future
                     onesec_future_spectra_mult_fpgaclks =  int(onesec_future_integer * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
-                    
+
                     if self.delay_track.is_set():
-                        if delays_initialised and calibration_delays_initialised:
+                        if delay_coeffs is not None:
                             loadtime_diff_modeltime = (onesec_future_integer - delay_coeffs["time_value"]) #calculate 1s into the future
                             delay_raterate = delay_coeffs["delay_raterate_nsps2"]
                             delay_rate = delay_coeffs["delay_rate_nsps"]
                             delay = delay_coeffs["delay_ns"]
-                            # T = ax^2 + bx + c
-                            delay_at_loadtime_diff_modeltime = [delay_raterate*(loadtime_diff_modeltime**2) + delay_rate*loadtime_diff_modeltime + delay]*self.delay.n_streams
+                            # T = ax^2 + bx + c + delay_calibrations
+                            self.delay_to_load = (np.array([delay_raterate*(loadtime_diff_modeltime**2) + 
+                                                delay_rate*loadtime_diff_modeltime + delay]*self.delay.n_streams) +
+                                                delay_calib)
                             # dT/dt = 2ax + b
-                            delay_rate_at_loadtime_diff_modeltime = [delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams
-                            
-                            #Add calibrations:
-                            delay_at_loadtime_diff_modeltime_calib = np.array(delay_at_loadtime_diff_modeltime) + delay_calib
+                            self.delay_rate_to_load = np.array([delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams)
 
                             #Load delays:
-                            self.set_delays(delay_at_loadtime_diff_modeltime_calib, delay_rate_at_loadtime_diff_modeltime,
-                                                [0,0,0,0], [0,0,0,0])
+                            self.set_delays()
+                        else:
+                            self.logger.warn(f"""{self.fpga.get_connected_antname()} 
+                                            has not received geometric delay values yet.
+                                            Consider clearing delay_track to only load calibration values...""")
 
                     else:
-                        if calibration_delays_initialised:
-                            #Load calibration delays:
-                            self.set_delays(delay_calib, [0,0,0,0], [0,0,0,0], [0,0,0,0])
+                        #Zero all delay_rate, phase and phase_rate values - calibration only
+                        self.delay_rate_to_load = np.zeros(self.phaserotate.n_streams)
+                        self.phase_to_load = np.zeros(self.phaserotate.n_streams)
+                        self.phase_rate_to_load = np.zeros(self.phaserotate.n_streams)
+                        
+                        #Load calibration delays - can assume all other delay values are zero given above check:
+                        self.delay_to_load = delay_calib
+
+                        #Load delays:
+                        self.set_delays()
 
                     assert time.time() < onesec_future_integer, "Error, target load time cannot be set for a time in the past!"
-                    #Load one second into the future:
                     self.delay.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
                     self.phaserotate.set_target_load_time(onesec_future_spectra_mult_fpgaclks)
                     time.sleep(onesec_future_integer - time.time()) #sleep for the difference between load time and now (to allow for loading)
@@ -1092,7 +1214,11 @@ class CosmicFengine():
             load_time=int(load_time)
 
         self.logger.debug("Setting delays at time %s" % (time.ctime(load_time)))
-        self.set_delays(delays, delay_rates, phases, phase_rates,clock_rate_hz,invert_band)
+        self.delay_to_load = np.array(delays)
+        self.delay_rate_to_load = np.array(delay_rates)
+        self.phase_to_load = np.array(phases)
+        self.phase_rate_to_load = np.array(phase_rates)
+        self.set_delays(clock_rate_hz, invert_band)
        
         #Handle the loading time/force loading of the delays
         if force_delay_load:
