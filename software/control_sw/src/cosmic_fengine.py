@@ -920,7 +920,7 @@ class CosmicFengine():
         This function runs in a thread and polls the time_to_load(). When it is negative, it means
         that the delay values have been loaded, and that it is time to check the firmware
         reported slope/phase against the object property delay, delay rate, phase and phase rate.
-        Publish an informative dictionary to FPGA_delayStatus for logging purposes.
+        Publish an informative dictionary to FENG_delayStatus for logging purposes.
         """
         #initialisation:
         exp_delay = np.zeros(self.delay.n_streams, dtype=float)
@@ -966,7 +966,7 @@ class CosmicFengine():
                         exp_delay[:] = np.NaN
                 else:
                     self.logger.info("Delay tracking not started. No received values as yet")
-                    exp_delay[:] = np.NaN
+                    exp_delay[:] = self.delay.MIN_DELAY
 
                 dict_to_pub["on"] = self.delay_switch.is_set()
                 dict_to_pub["tracking"] = self.delay_track.is_set()
@@ -979,7 +979,7 @@ class CosmicFengine():
                 dict_to_pub["time_since_load_sec"] = time_since_load
 
                 self.redis_obj.hset(
-                    "FPGA_delayStatus",
+                    "FENG_delayStatus",
                     f"{self.fpga.get_connected_antname()}",
                     json.dumps(dict_to_pub)
                     )
