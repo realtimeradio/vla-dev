@@ -882,17 +882,9 @@ class CosmicFengine():
         phases = ((phases + 1) % 2) - 1   # place in range +/- 1
 
         # Convert phase rates to fractions of pi per spectra
-        self.logger.debug("Phase rates [radians per sec]: %s" % self.phase_rate_to_load)
         phase_rates_per_spec = self.phase_rate_to_load * (2*self.autocorr.n_chans) / clock_rate_hz
-        self.logger.debug("Phase rates [radians per spectrum]: %s" % phase_rates_per_spec)
         phase_rates_per_spec = phase_rates_per_spec / np.pi # normalize to fractions of pi
-        self.logger.debug("Phase rates [pis per spectrum]: %s" % phase_rates_per_spec)
         phase_rates_per_spec = ((phase_rates_per_spec + 1) % 2) - 1        # place in range +/- 1
-        self.logger.debug("Wrapped Phase rates [pis per spectrum]: %s" % phase_rates_per_spec)
-        self.logger.debug("Integer sample delays: %s" % (delay_samples_int))
-        self.logger.debug("Fractional sample delays: %s" % (delay_samples_frac))
-        self.logger.debug("Phase being set to: %s" % phases)
-        self.logger.debug("Phase rates being set to: %s" % phase_rates_per_spec)
 
         #Load the delays:
         self.delay.disable_load() # Disable load during configuration for delay
