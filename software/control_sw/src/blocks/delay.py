@@ -61,12 +61,13 @@ class Delay(Block):
             raise RuntimeError(message)
         if delay < self.MIN_DELAY:
             self._warning("User requested delay of %d, but choosing %d because this is the minimum" % (delay, self.MIN_DELAY))
+            delay = self.MIN_DELAY
         if stream > self.n_streams:
             self._error('Tried to set delay for stream %d > n_streams (%d)' % (stream, self.n_streams))
         if self.max_delay is None:
             self.get_max_delay()
         if delay >= self.max_delay:
-            self._error('Tried to set delay to %d which is > the allowed maximum (%d)' % (delay, self.max_delay))
+            self._warning('Tried to set delay to %d which is > the allowed maximum (%d)' % (delay, self.max_delay))
             delay = self.max_delay-1
         self._debug('Setting delay of stream %d to %d' % (stream, delay))
         delay_reg  = 'delay%d_delay' % (stream)
