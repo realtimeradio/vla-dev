@@ -737,11 +737,17 @@ class CosmicFengine():
             if nchans > channels_to_send:
                 channels_to_send = nchans
 
+        self.logger.debug("Channels to send by FID: %s" % (str(channels_to_send_by_fid)))
+        self.logger.debug("Largest number of chans with one destination: %d" % channels_to_send)
+
         pkt_starts, pkt_payloads, word_indices, antchans = self.packetizer.get_packet_info(chans_per_packet, channels_to_send, ninput)
         n_pkts = len(pkt_starts)
         antchan_indices = np.arange(n_pkts*chans_per_packet, dtype=int)[::chans_per_packet]
         chan_indices = antchan_indices % channels_to_send
         ant_indices = antchan_indices // channels_to_send
+        self.logger.debug("Antenna-Channel indices: %s" % (str(antchan_indices)))
+        self.logger.debug("Channel indices: %s" % (str(chan_indices)))
+        self.logger.debug("Antenna indices: %s" % (str(ant_indices)))
 
         # Reorder channels / antennas so they fall in the places we want
         # Current map
@@ -770,13 +776,13 @@ class CosmicFengine():
                 # loop over packets to this destination, antenna slowest, chan fastest
                 for ant in range(ninput):
                     for cn, chan in enumerate(chans[::chans_per_packet]):
-                        self.logger.debug('assigning dest %s; ant %d, chan %d' % (dest, ant, chan))
+                        self.logger.debug('assigning dest %s (packet %d) ant %d, chan %d' % (dest, cn, ant, chan))
                         try:
                             feng_ids[pkt_num] = ant if 'feng_ids' not in dest else dest['feng_ids'][ant]
                         except IndexError:
                             self.logger.debug('skipping channel start %d for input %d because it isnt in the feng_ids list' % (chan, ant))
                             continue
-                        chan_indices[pkt_num] += start_chan
+                        chan_indices[pkt_num] = chan
                         ips[pkt_num] = dest_ip
                         ports[pkt_num] = dest_port
                         # Use the order maps to figure out where we should put these antchans
