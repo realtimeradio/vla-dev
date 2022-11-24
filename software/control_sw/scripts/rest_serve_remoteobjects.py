@@ -68,7 +68,10 @@ if __name__ == '__main__':
 
     if 'PCIE_IGNORE' in os.environ:
         for pcie_dev in os.environ['PCIE_IGNORE'].split(','):
-            PCIE_XDMA_DICT.pop(pcie_dev)
+            if pcie_dev in PCIE_XDMA_DICT:
+                PCIE_XDMA_DICT.pop(pcie_dev)
+            else:
+                print(f"No PCIE device named `{pcie_dev}` to ignore.")
 
     for (pcie_id, xdma_id) in PCIE_XDMA_DICT.items():
         for pipeline_id in range(2):
