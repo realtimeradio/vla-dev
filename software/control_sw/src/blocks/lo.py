@@ -113,7 +113,7 @@ class Lo(Block):
         """
         assert frequency_shift <= self.get_max_shift(), f"""Specified frequency_shift {frequency_shift}Hz is larger than the maximum shift allowed {self.get_max_shift()}Hz."""
         assert frequency_shift >= self.get_min_shift(), f"""Specified frequency_shift {frequency_shift}Hz is smaller than the minimum shift allowed {self.get_min_shift()}Hz."""
-        phase_step = (frequency_shift/self.samplehz) * (2**self._BP)
+        phase_step = (frequency_shift/self.samplehz)
         self.set_phase_step(stream, phase_step)
 
     def get_lo_frequency_shift(self, stream, return_in_hz = True):
