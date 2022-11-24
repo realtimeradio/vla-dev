@@ -938,40 +938,36 @@ class CosmicFengine():
         firm_phase = np.zeros(self.delay.n_streams, dtype=float)
 
         while True:
-            time_since_load = -1.0 * float(self.phaserotate.get_time_to_load()) / FPGA_CLOCK_RATE_HZ # fpga_clks -> s
-            if time_since_load >= 0.0:
-                #we only check delays if we know they've been loaded
-                for stream in range(self.phaserotate.n_streams):
-                    
-                    #fetch the firmware reported slope and delay (samples):
-                    slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
-                    phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
-                    firm_phase[stream] = phase/phase_scale
-                    firm_delay[stream] = (-1.0 * slope/slope_scale) + self.delay.get_delay(stream)
-
-                exp_delay = (
-                    delay_to_load + delay_rate_to_load * time_since_load
-                    ) * 1e-9 * 2048e6
-                exp_phase = np.zeros(self.delay.n_streams, dtype=float)
-                try:
-                    self.redis_obj.hset(
-                        "FENG_delayStatus",
-                        f"{self.fpga.get_connected_antname()}",
-                        json.dumps({
-                            "expected_delay" : np.round(exp_delay,decimals=3).tolist(),
-                            "expected_phase" : np.round(exp_phase,decimals=3).tolist(),
-                            "firmware_delay" : np.round(firm_delay,decimals=3).tolist(),
-                            "firmware_phase" : np.round(firm_phase,decimals=3).tolist(),
-                            "delay_correct"  : np.isclose(exp_delay,firm_delay,atol=1e-3).tolist(),
-                            "phase_correct"  : np.isclose(exp_phase,firm_phase,atol=1e-3).tolist(),
-                            "time_since_load_sec" : round(time_since_load,8)
-                            })
-                        )
-                except:
-                    self.logger.error("Delay monitor unable to post to redis hash FENG_delayStatus.")
-                return
-            else:
-                continue
+            #here we can be sure the time is in the past (negative)
+            time_since_load = -1.0 * self.phaserotate.get_time_to_load() / FPGA_CLOCK_RATE_HZ # fpga_clks -> s
+            for stream in range(self.phaserotate.n_streams):
+                
+                #fetch the firmware reported slope and delay (samples):
+                slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
+                phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
+                firm_phase[stream] = phase/phase_scale
+                firm_delay[stream] = (-1.0 * slope/slope_scale) + self.delay.get_delay(stream)
+            exp_delay = (
+                delay_to_load + delay_rate_to_load * time_since_load
+                ) * 1e-9 * 2048e6
+            exp_phase = np.zeros(self.delay.n_streams, dtype=float)
+            try:
+                self.redis_obj.hset(
+                    "FENG_delayStatus",
+                    f"{self.fpga.get_connected_antname()}",
+                    json.dumps({
+                        "expected_delay" : np.round(exp_delay,decimals=4).tolist(),
+                        "expected_phase" : np.round(exp_phase,decimals=4).tolist(),
+                        "firmware_delay" : np.round(firm_delay,decimals=4).tolist(),
+                        "firmware_phase" : np.round(firm_phase,decimals=4).tolist(),
+                        "delay_correct"  : np.isclose(exp_delay,firm_delay,atol=1e-3).tolist(),
+                        "phase_correct"  : np.isclose(exp_phase,firm_phase,atol=1e-3).tolist(),
+                        "time_since_load_sec" : round(time_since_load,8)
+                        })
+                    )
+            except:
+                self.logger.error("Delay monitor unable to post to redis hash FENG_delayStatus.")
+            return
 
     def stop_delay_tracking(self):
         """
@@ -1091,7 +1087,7 @@ class CosmicFengine():
 
             else:
                 #No values received, load values on hand
-                one_decisec_future_spectra_mult_fpgaclks =  int((time.time_ns() * 1e-9 + 6e-3) * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra - 1 decisecond into the future
+                one_decisec_future_spectra_mult_fpgaclks =  int((time.time_ns() * 1e-9 + 6.5e-3) * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
                 one_decisec_future_seconds = one_decisec_future_spectra_mult_fpgaclks / FPGA_CLOCK_RATE_HZ
                 
                 # with self._delay_lock:
