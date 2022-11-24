@@ -37,8 +37,6 @@ class Lo(Block):
         self.n_streams = n_streams
         self.n_par_samples = n_par_samples
         self.samplehz = samplehz
-        self.phase_step_reg_lsb = f"""{stream}_phase_step_lsb"""
-        self.phase_step_reg_msb = f"""{stream}_phase_step_msb"""
 
     def set_reload_repeat_period(self, period):
         """
@@ -50,7 +48,7 @@ class Lo(Block):
         :type period: int
         """
         assert period % self.n_par_samples == 0, "Period not a multiple of FPGA period"
-        self.write_uint("reset_repeat_rate", period // self.n_par_samples)
+        self.write_int("reset_repeat_rate", period // self.n_par_samples)
 
     def set_phase_step(self, stream, phase_step):
         """
@@ -79,9 +77,9 @@ class Lo(Block):
         self._debug(f"""Setting lo phase step of stream {stream} to {phase_step}""")
         if phase_step < 0:
             phase_step += 2**self._BW
-        self.write_int(self.phase_step_reg_lsb, phase_step & (2**32 - 1))
-        self.write_int(self.phase_step_reg_msb, phase_step >> 32)
-
+        self.write_int(f"""{stream}_phase_offset_lsb""", int(phase_step) & 0xffffffff)
+        self.write_int(f"""{stream}_phase_offset_msb""", (int(phase_step) >> 32) & 0xffffffff)
+        
     def force_load(self):
         """
         Force immediate load of all phase/delay parameters.
@@ -95,8 +93,8 @@ class Lo(Block):
         :param stream: ADC stream index to which the phase should be applied.
         :type stream: int
         """
-        lsb = self.read_uint(self.phase_step_reg_lsb)
-        msb = self.read_uint(self.phase_step_reg_msb)
+        lsb = self.read_uint(f"""{stream}_phase_offset_lsb""")
+        msb = self.read_uint(f"""{stream}_phase_offset_msb""")
         v = (msb << 32) + lsb
         if v > self.MAX_PHASE_STEP:
             v -= 2**self._BW
@@ -143,13 +141,13 @@ class Lo(Block):
         """
         Calculate the maximum allowed frequency shift, in Hz
         """
-        return self.MAX_PHASE_OFFSET * self.samplehz / 2**self._BP
+        return self.MAX_PHASE_STEP * self.samplehz / 2**self._BP
 
     def get_min_shift(self):
         """
         Calculate the minimum allowed frequency shift, in Hz
         """
-        return self.MIN_PHASE_OFFSET * self.samplehz / 2**self._BP
+        return self.MIN_PHASE_STEP * self.samplehz / 2**self._BP
 
     def get_shift_resolution(self):
         """
