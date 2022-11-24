@@ -91,8 +91,8 @@ class Eth(Block):
 
         stats['tx_of'  ] = self.read_uint(self._CORE_NAME + '_gmac_reg_tx_overflow_count')
         stats['tx_full'] = self.read_uint(self._CORE_NAME + '_gmac_reg_tx_almost_full_count')
-        stats['tx_vld' ] = self.read_uint(self._CORE_NAME + '_gmac_reg_tx_valid_count')
-        stats['tx_ctr' ] = self.read_uint(self._CORE_NAME + '_gmac_reg_tx_packet_count')
+        stats['tx_vld' ] = self.read_uint(self._CORE_NAME + '_txvldctr')
+        stats['tx_ctr' ] = self.read_uint(self._CORE_NAME + '_txctr')
         if stats['tx_of'] > 0:
             flags['tx_of'] = FENG_ERROR
         if stats['tx_full'] > 0:
