@@ -355,9 +355,6 @@ class Packetizer(Block):
         check_length(dest_ports, n_packets, 'dest_ports')
         check_length(nchans_per_packet, n_packets, 'chans_per_packet')
 
-        print(channel_indices)
-        print(antenna_ids)
-
         # generate template headers for all invalid data
         headers = []
         for i in range(self.n_slots):
