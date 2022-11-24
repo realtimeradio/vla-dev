@@ -1,20 +1,57 @@
 fengines:
-    chans_per_packet: 32
-    pcie0:
+    chans_per_packet: 64
+    dts_lane_map:
+        - [0,1,3,2,4,5,7,6,8,9,11,10] # Default for pipeline ID 0
+        - [4,5,7,6,0,1,3,2,8,9,11,10] # Default for pipeline ID 1
+    pcie65:
         0:
-            inputs: [0, 2]
-            gbes: ['100.100.102.20']
+            feng_ids: [0, 1]
+            gbes: ['192.168.64.20', '192.168.65.20']
             source_port: 10000
         1:
-            inputs: [2, 4]
-            gbes: ['100.100.102.21']
+            feng_ids: [2, 3]
+            gbes: ['192.168.64.21', '192.168.65.21']
             source_port: 10000
+            #dts_lane_map: [8,9,2,3,10,11,4,5,0,1,6,7] Override default if necessary
 
 xengines:
   arp:
     # cosmic-gpu-0
-    100.100.102.100: 0xb8cef6a64188
-    100.100.103.100: 0xb8cef6a64189
+    192.168.64.100: 0xb8cef6a642a1
+    192.168.65.100: 0xb8cef6a64189
+    192.168.64.0  : 0xdeaddeaddead
+    192.168.65.0  : 0xdeaddeaddead
   chans:
+    # Channel destinations are specified as:
+    # ip-port: [[feng_ids], [first_chan, last_chan+1]]
     # cosmic-gpu-0
-    100.100.102.100-10000: [0, 512]
+    192.168.64.100-11111:
+            # The feng_mask/feng_range_mask entries filter the feng_ids
+            # of the pipelines. The feng_ids that will actually be sent
+            # to the xengine-destination is the union of the mask and the
+            # pipeline's feng_ids list.
+
+            # Send specific Feng IDs. This key overrides feng_range
+            # feng_mask: [0,1,2,3,4,5,6,7]
+            # Send a range of fengs. If [x,y] is given, send range(x,y).
+            # If [x,y,z] is given, send range(x,y,z)
+            feng_range_mask: [0,8,2] # Even Feng-IDs
+            # Give [x,y] to send channel range range(x,y)
+            chan_range: [64,128]
+            ethport: 0
+    # cosmic-gpu-0
+    192.168.65.100-11111:
+            feng_range_mask: [1,8,2] # Odd Feng-IDs
+            # Give [x,y] to send channel range range(x,y)
+            chan_range: [64,128]
+            ethport: 0
+    192.168.64.0-11111:
+            feng_range_mask: [0,8,2] # Odd Feng-IDs
+            # Give [x,y] to send channel range range(x,y)
+            chan_range: [128,192]
+            ethport: 0
+    192.168.65.0-11111:
+            feng_range_mask: [1,8,2] # Odd Feng-IDs
+            # Give [x,y] to send channel range range(x,y)
+            chan_range: [128,192]
+            ethport: 0
