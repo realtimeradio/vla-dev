@@ -262,13 +262,17 @@ class CosmicFengine():
         self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
                 n_times=NTIME_PACKET, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
 
-        #: Control interface to Packetizerblock
+        #: Control interface to Packetizer blocks
         # 8 signals = 4 IFs (only half are real)
-        self.packetizer = packetizer.Packetizer(self._cfpga,
-                'pipeline%d_packetizer0' % self.pipeline_id,
+        self.packetizers = []
+        for i in range(self.neths):
+            self.packetizers += [packetizer.Packetizer(self._cfpga,
+                'pipeline%d_packetizer%d' % (self.pipeline_id, i),
                 n_chans=NCHANS, n_ants=4, sample_rate_mhz=2048,
                 sample_width=2, word_width=64, line_rate_gbps=100.,
-                n_time_packet=NTIME_PACKET, granularity=4)
+                n_time_packet=NTIME_PACKET, granularity=4)]
+        for packetizern, packetizerblock in enumerate(self.packetizers):
+            setattr(self, 'packetizer%d' % packetizern, packetizerblock)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
@@ -296,6 +300,8 @@ class CosmicFengine():
             'corr'        : self.corr,
             'chanreorder' : self.chanreorder,
         }
+        for pn, packetizerdev in enumerate(self.packetizers):
+            self.blocks['packetizer%d' % pn] = packetizerdev
         for en, ethdev in enumerate(self.eths):
             self.blocks['eth%d' % en] = ethdev
 
@@ -555,6 +561,7 @@ class CosmicFengine():
                 dest_ip = xeng.split('-')[0]
                 dest_port = int(xeng.split('-')[1])
                 chan_range = v['chan_range']
+                interface_id = v.get('ethport', 0)
                 start_chan = chan_range[0]
                 nchan = chan_range[1] - start_chan
                 if 'feng_mask' in v:
@@ -567,7 +574,9 @@ class CosmicFengine():
                 for f in feng_ids:
                     if f in fengs_this_dest:
                         fengs_to_send += [f]
-                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':fengs_to_send}]
+                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan,
+                           'nchan':nchan, 'feng_ids':fengs_to_send,
+                           'interface_id':interface_id}]
         except:
             self.logger.exception("Failed to parse output configuration file %s" % config_file)
             raise
@@ -655,6 +664,8 @@ class CosmicFengine():
                 ``nchans`` should be a multiple of ``chans_per_packet``.
               - 'feng_ids': The identifying numbers of the antenna-streams,
                 as interpreted by the destination. 1 per tuning/input.
+              - 'interface_id': The zero-indexed output interface ID from which these
+                data should be transmitted.
         :type dests: List of dict
 
         :param dts_lane_map: If not None, override the default DTS lane mapping as part of
@@ -711,7 +722,7 @@ class CosmicFengine():
 
         for sn, source_ip in enumerate(source_ips):
             if sn >= self.neths:
-                self.logger.warning('Skipping setting Ethernet interface %d of %d' % (sn, self.neths))
+                self.logger.warning('Skipping setting Ethernet interface with ID %d' % (sn))
                 continue
             mac = MAC_BASE + int(source_ip.split('.')[-1])
             self.eths[sn].configure_source(mac, source_ip, source_port)
@@ -737,7 +748,7 @@ class CosmicFengine():
             if nchans > channels_to_send:
                 channels_to_send = nchans
 
-        pkt_starts, pkt_payloads, word_indices, antchans = self.packetizer.get_packet_info(chans_per_packet, channels_to_send, ninput)
+        pkt_starts, pkt_payloads, word_indices, antchans = self.packetizers[0].get_packet_info(chans_per_packet, channels_to_send, ninput)
         n_pkts = len(pkt_starts)
         antchan_indices = np.arange(n_pkts*chans_per_packet, dtype=int)[::chans_per_packet]
         chan_indices = antchan_indices % channels_to_send
@@ -755,6 +766,7 @@ class CosmicFengine():
         ips = ['0.0.0.0' for _ in range(n_pkts)]
         feng_ids = [-1 for _ in range(n_pkts)]
         ports = [0 for _ in range(n_pkts)]
+        interface_ids = [False for _ in range(n_pkts)]
         pkt_num = 0
         ok = True
         for dn, dest in enumerate(dests):
@@ -767,6 +779,7 @@ class CosmicFengine():
                 if dest_ip not in macs:
                    self.logger.critical("MAC address for IP %s is not known" % dest_ip)
                 dest_port = dest['port']
+                interface_id = dest['interface_id']
                 # loop over packets to this destination, antenna slowest, chan fastest
                 for ant in range(ninput):
                     for cn, chan in enumerate(chans[::chans_per_packet]):
@@ -779,6 +792,7 @@ class CosmicFengine():
                         chan_indices[pkt_num] += start_chan
                         ips[pkt_num] = dest_ip
                         ports[pkt_num] = dest_port
+                        interface_ids[pkt_num] = interface_id
                         # Use the order maps to figure out where we should put these antchans
                         ant_id = feng_ids[pkt_num] % ninput # TODO: is this right?
                         ant_order[antchans[pkt_num]] = ant_id
@@ -791,7 +805,8 @@ class CosmicFengine():
 
         if ok:
             self.chanreorder.set_antchan_order(ant_order, chan_order)
-            self.packetizer.write_config(
+            for pn, packetizer in enumerate(self.packetizers):
+                packetizer.write_config(
                     pkt_starts,
                     pkt_payloads,
                     chan_indices.tolist(),
@@ -799,6 +814,7 @@ class CosmicFengine():
                     ips,
                     ports,
                     [chans_per_packet]*n_pkts,
+                    [x==pn for x in interface_ids],
                     )
         else:
             self.logger.error("Not configuring Ethernet output because configuration builder failed")
@@ -1213,18 +1229,21 @@ class CosmicFengine():
             for stream, _ in enumerate(lo_delay_list)
         ]
 
-    def read_chan_dest_ips_as_json(self):
+    def read_chan_dest_ips_as_json(self, portnum):
         '''
         Reads the headers of the packetizer block and constructs a summative
         report of the channels' destination-IPs, as a json string.
+
+        :param portnum: Which zero-indexed output interface to query.
+        :type portnum: int
         '''
-        if not hasattr(self, 'packetizer'):
+        if not hasattr(self, 'packetizers'):
             return '[]'
         
         if not any([eth.tx_enabled() for eth in self.eths]):
             return '[]'
 
-        headers = self.packetizer._read_headers()
+        headers = self.packetizers[portnum]._read_headers()
         
         packet_dest_ips = []
         for header in headers:
