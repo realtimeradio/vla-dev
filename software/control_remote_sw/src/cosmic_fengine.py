@@ -1,7 +1,7 @@
 import json
 import numpy as np
 import io
-from remoteobjects.client import defineRemoteClass
+from remoteobjects.client import defineRemoteClass, RemoteObjectError
 
 
 __COSMIC_FENGINE_REMOTE__ = None
