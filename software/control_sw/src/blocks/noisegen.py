@@ -72,7 +72,7 @@ class NoiseGen(Block):
             self._error('Tried to get noise generator seed for n %d > n_noise (%d)' % (n, self.n_noise))
             return
         regname = 'seeds%d' % ((n*self.n_parallel_samples//2) // 4)
-        return self.get_reg_bits(regname, 8 * ((n*self.n_parallel_samples//2) % 4), wdith=8)
+        return self.get_reg_bits(regname, 8 * ((n*self.n_parallel_samples//2) % 4), width=8)
 
     def assign_output(self, output, noise):
         """
