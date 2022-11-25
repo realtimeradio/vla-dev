@@ -691,10 +691,20 @@ class CosmicFengine():
         
         #first, load lo_offshifts, assuming those received are in hz:
         if lo_fshift_list is not None:
+            
+            self.lo.set_reload_repeat_period(2048e6)
+
             for stream, offshift in enumerate(lo_fshift_list):
                 self.lo.set_lo_frequency_shift(stream, offshift)
-            self.lo.force_load()
 
+            lo_load_time = np.ceil(time.time()) + 1 #one second into the future
+            if lo_load_time > time.time():
+                self.lo.set_target_load_time(lo_load_time * FPGA_CLOCK_RATE_HZ, enable_trig=True)
+                self.logger.info(f"F-Shift load time set to {time.ctime(lo_load_time)}")
+                time.sleep(lo_load_time - (time.time()))
+            else:
+                raise RuntimeError("Cannot set F-shift load time for time in the past.")
+            
         if sync:
             self.logger.info("Arming sync generators")
             for eth in self.eths:
