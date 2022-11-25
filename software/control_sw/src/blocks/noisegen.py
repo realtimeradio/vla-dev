@@ -49,14 +49,14 @@ class NoiseGen(Block):
         :type seed: int
         """
         if n> self.n_noise:
-            self._error('Tried to set noise generator seed fo core %d > n_noise (%d)' % (m, self.n_noise))
+            self._error('Tried to set noise generator seed for core %d > n_noise (%d)' % (n, self.n_noise))
             return
         if seed > 255:
             self._error('Seed value is an 8-bit integer. It cannot be %d' % seed)
             return
         for i in range(self.n_parallel_samples//2):
             regname = 'seeds%d' % ((n*self.n_parallel_samples//2+i) // 4)
-            self.change_reg_bits(regname, seed+i, 8 * ((n*self.n_parallel_samples//2+i) % 4), 8)
+            self.change_reg_bits(regname, seed+i, 8 * ((n*self.n_parallel_samples//2+i) % 4), width=8)
 
     def get_seed(self, n):
         """
@@ -72,7 +72,7 @@ class NoiseGen(Block):
             self._error('Tried to get noise generator seed for n %d > n_noise (%d)' % (n, self.n_noise))
             return
         regname = 'seeds%d' % ((n*self.n_parallel_samples//2) // 4)
-        return self.get_reg_bits(regname, 8 * ((n*self.n_parallel_samples//2) % 4), 8)
+        return self.get_reg_bits(regname, 8 * ((n*self.n_parallel_samples//2) % 4), width=8)
 
     def assign_output(self, output, noise):
         """
