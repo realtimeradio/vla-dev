@@ -699,7 +699,7 @@ class CosmicFengine():
 
             lo_load_time = np.ceil(time.time()) + 1 #one second into the future
             if lo_load_time > time.time():
-                self.lo.set_target_load_time(lo_load_time * FPGA_CLOCK_RATE_HZ, enable_trig=True)
+                self.lo.set_target_load_time(int(lo_load_time * FPGA_CLOCK_RATE_HZ), enable_trig=True)
                 self.logger.info(f"F-Shift load time set to {time.ctime(lo_load_time)}")
                 time.sleep(lo_load_time - (time.time()))
             else:
