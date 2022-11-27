@@ -692,7 +692,7 @@ class CosmicFengine():
         #first, load lo_offshifts, assuming those received are in hz:
         if lo_fshift_list is not None:
             
-            self.lo.set_reload_repeat_period(2048e6)
+            self.lo.set_reload_repeat_period(int(2048e6))
 
             for stream, offshift in enumerate(lo_fshift_list):
                 self.lo.set_lo_frequency_shift(stream, offshift)
