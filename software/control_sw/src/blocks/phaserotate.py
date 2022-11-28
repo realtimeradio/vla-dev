@@ -54,15 +54,12 @@ class PhaseRotate(Block):
 
     def set_delay(self, stream, delay):
         """
-        Set the delay for a given stream. Break the delay provided into 
-        two 32bit integers so as to correctly load the delay. While the registers are
-        unsigned, the composite 64bit value is interpreted as signed since
-        most loaded delays will be negative.
+        Set the delay in units of ADC samples for the specified stream.
 
         :param stream: ADC stream index to which the delay should be applied.
         :type stream: int
 
-        :param delay: delay to load
+        :param delay: delay to load (ADC samples)
         :type delay: float
         """
         if delay > self.MAX_DELAY: 
@@ -100,7 +97,7 @@ class PhaseRotate(Block):
     
     def get_delay(self, stream):
         """
-        Retrieve the programmed fractional delay for a given stream.
+        Retrieve the programmed fractional delay in ADC samples for a given stream.
 
         :param stream: ADC stream index from which the fractional delay should be retrieved.
         :type stream: int
@@ -125,12 +122,12 @@ class PhaseRotate(Block):
     
     def set_delay_rate(self, stream, delay_rate):
         """
-        Set the delay rate for a given stream.
+        Set the delay rate in ADC samples per spectra for a given stream.
 
         :param stream: ADC stream index to which the phase should be applied.
         :type stream: int
 
-        :param delay_rate: delay_rate to load
+        :param delay_rate: delay_rate to load (ADC samples per spectra)
         :type delay_rate: float
         """
         if delay_rate > self.MAX_DELAY_RATE:
@@ -167,7 +164,7 @@ class PhaseRotate(Block):
 
     def get_delay_rate(self, stream):
         """
-        Retrieve the programmed delay rate for a given stream.
+        Retrieve the programmed delay rate in ADC samples per spectra for a given stream.
 
         :param stream: ADC stream index from which the delay rate should be retrieved.
         :type stream: int
@@ -188,12 +185,12 @@ class PhaseRotate(Block):
 
     def set_phase(self, stream, phase):
         """
-        Set the delay rate for a given stream.
+        Set the phase in radians normalised to +/- 1 for a given stream.
 
         :param stream: ADC stream index to which the phase should be applied.
         :type stream: int
 
-        :param phase: phase to load
+        :param phase: phase to load (radians)
         :type phase: float
         """
         if phase >= self.MAX_PHASE:
@@ -223,7 +220,7 @@ class PhaseRotate(Block):
 
     def get_phase(self, stream):
         """
-        Retrieve the programmed delay phase for a given stream.
+        Retrieve the programmed phase in radians normalised to +/- 1 for a given stream in radians.
 
         :param stream: ADC stream index from which the delay phase should be retrieved.
         :type stream: int
@@ -244,12 +241,12 @@ class PhaseRotate(Block):
 
     def set_phase_rate(self, stream, phase_rate):
         """
-        Set the phase rate for a given stream.
+        Set the phase rate in radians per spectra for a given stream.
 
         :param stream: ADC stream index to which the phase_rate should be applied.
         :type stream: int
 
-        :param phase_rate: phase_rate to load
+        :param phase_rate: phase_rate to load (radians per spectra)
         :type phase_rate: float
         """
         if phase_rate >= self.MAX_PHASE_RATE:
@@ -285,7 +282,7 @@ class PhaseRotate(Block):
     
     def get_phase_rate(self, stream):
         """
-        Retrieve the programmed delay phase rate for a given stream.
+        Retrieve the programmed phase rate in radians per spectra for a given stream.
 
         :param stream: ADC stream index from which the delay phase rate should be retrieved.
         :type stream: int
@@ -306,7 +303,7 @@ class PhaseRotate(Block):
 
     def get_firmware_slope(self, stream):
         """
-        Retrieve the firmware reported slope for a given stream.
+        Retrieve the firmware reported slope in samples for a given stream.
 
         :param stream: ADC stream index for which the slope should be retrieved.
         :type stream: int
@@ -320,7 +317,7 @@ class PhaseRotate(Block):
 
     def get_firmware_phase(self, stream):
         """
-        Retrieve the firmware reported phase for a given stream.
+        Retrieve the firmware reported phase in radians for a given stream.
 
         :param stream: ADC stream index for which the phase should be retrieved.
         :type stream: int
@@ -334,9 +331,9 @@ class PhaseRotate(Block):
         
     def set_target_load_time(self, value, enable_trig=True):
         """
-        Load a new target TT
+        Set the TT to `value` in units of FPGA clocks
 
-        :param value: Telescope time to load
+        :param value: Telescope time to load in FPGA clocks
         :type value: int
 
         :param enable_trig: If True, enable the triggering of a sync pulse
@@ -367,7 +364,7 @@ class PhaseRotate(Block):
 
     def get_target_load_time(self):
         """
-        Get currently set target load time.
+        Get currently set target load time in units of FPGA clocks.
         
         :return: target_tt
         :rtype: int
@@ -380,7 +377,7 @@ class PhaseRotate(Block):
         The returned value will be negative if the trigger time
         is in the past.
         
-        :return: time_to_load
+        :return: time_to_load (FPGA clocks)
         :rtype: int
         """
         return self.timer.get_time_to_load()

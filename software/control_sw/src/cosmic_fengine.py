@@ -872,16 +872,17 @@ class CosmicFengine():
             # If delay rate is positive, want to make fractional delay as small as possible,
             # so round delay up
             if delay_rate_to_load[if_id] > 0:
-                delay_samples_int[if_id] = int(np.ceil(delay_samples[if_id]))
+                delay_samples_int[if_id] = (np.ceil(delay_samples[if_id])).astype(int)
             # If delay rate is negative, we want to make fractional delay as large as possible,
             # so round integer delay down
+            elif delay_rate_to_load[if_id] < 0:
+                delay_samples_int[if_id] = (np.floor(delay_samples[if_id])).astype(int)
+            # If delay rate is zero, we want to keep put as much fractionally into the fractional part
             elif delay_rate_to_load[if_id]==0:
                 if delay_samples[if_id] >=0:
-                    delay_samples_int[if_id] = int(np.floor(delay_samples[if_id]))
+                    delay_samples_int[if_id] = (np.floor(delay_samples[if_id])).astype(int)
                 else:
-                    delay_samples_int[if_id] = int(np.ceil(delay_samples[if_id]))
-            else:
-                delay_samples_int[if_id] = int(np.floor(delay_samples[if_id]))
+                    delay_samples_int[if_id] = (np.ceil(delay_samples[if_id])).astype(int)
 
         delay_samples_frac = (delay_samples - delay_samples_int).astype(np.float)
         # Massage rates into samples-per-spectra (lots of redundant use of clock rate...)
@@ -914,7 +915,7 @@ class CosmicFengine():
                 self.logger.error(f"Error encountered in settting delays and phases: {err}")
                 return
 
-    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load):
+    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, invert_band = False):
         """
         From the delay and delay rate values for this fengine instance, calculate an expected delay
         slope value for a given time. 
@@ -932,6 +933,9 @@ class CosmicFengine():
         :type phase_to_load: ndarray{float}
         :param phase_rates_to_load: The n_streams phase rates (radians/s) that the delay loading thread believes was loaded.
         :type phase_rates_to_load: ndarray{float}
+        :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
+            apply a fractional delay which is the negative of the physical delay.
+        :type invert_band: bool
         """
         #initialisation:
         firm_delay = np.zeros(self.delay.n_streams, dtype=float)
@@ -944,12 +948,18 @@ class CosmicFengine():
                 
                 #fetch the firmware reported slope and delay (samples):
                 slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
+                firm_frac_delay = (-1.0 * slope/slope_scale if invert_band else slope/slope_scale)
                 phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
                 firm_phase[stream] = phase/phase_scale
-                firm_delay[stream] = (-1.0 * slope/slope_scale) + self.delay.get_delay(stream)
+                firm_int_delay = self.delay.get_delay(stream)
+                firm_delay[stream] = firm_int_delay + firm_frac_delay
+                rate,scale = self.phaserotate.get_delay_rate(stream)
+                delay,scale = self.phaserotate.get_delay(stream)
+                
             exp_delay = (
-                delay_to_load + delay_rate_to_load * time_since_load
-                ) * 1e-9 * 2048e6
+                (delay_to_load.astype(int) - delay_to_load%1 - (delay_rate_to_load * time_since_load)) * 1e-9 * 2048e6 
+                if invert_band else
+                (delay_to_load + (delay_rate_to_load * time_since_load)) * 1e-9 * 2048e6)
             exp_phase = np.zeros(self.delay.n_streams, dtype=float)
             try:
                 self.redis_obj.hset(
@@ -1087,12 +1097,12 @@ class CosmicFengine():
 
             else:
                 #No values received, load values on hand
-                one_decisec_future_spectra_mult_fpgaclks =  int((time.time_ns() * 1e-9 + 6.5e-3) * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
-                one_decisec_future_seconds = one_decisec_future_spectra_mult_fpgaclks / FPGA_CLOCK_RATE_HZ
+                t_future_fpga_clks =  int((time.time_ns() * 1e-9 + 1e-2) * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
+                t_future_seconds = t_future_fpga_clks / FPGA_CLOCK_RATE_HZ
                 
                 # with self._delay_lock:
                 if self.delay_track.is_set():
-                    loadtime_diff_modeltime = (one_decisec_future_seconds - delay_coeffs["time_value"]) #calculate 1s into the future
+                    loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"]) #calculate 1s into the future
                     delay_raterate = delay_coeffs["delay_raterate_nsps2"]
                     delay_rate = delay_coeffs["delay_rate_nsps"]
                     delay = delay_coeffs["delay_ns"]
@@ -1117,14 +1127,14 @@ class CosmicFengine():
                 #Load delays:
                 self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load)
 
-                if(one_decisec_future_seconds > (time.time_ns()*1e-9)):
-                    self.delay.set_target_load_time(one_decisec_future_spectra_mult_fpgaclks)
-                    self.phaserotate.set_target_load_time(one_decisec_future_spectra_mult_fpgaclks)
+                if(t_future_seconds > (time.time_ns()*1e-9)):
+                    self.delay.set_target_load_time(t_future_fpga_clks)
+                    self.phaserotate.set_target_load_time(t_future_fpga_clks)
                 else:
-                    self.logger.warn(f"""Delays calculated for time {one_decisec_future_seconds} is in the past. Continuing...""")
+                    self.logger.warn(f"""Delays calculated for time {t_future_seconds} is in the past. Continuing...""")
                     continue
                 try:
-                    time.sleep(one_decisec_future_seconds - (time.time_ns()*1e-9)) #sleep for the difference between load time and now (to allow for loading)
+                    time.sleep(t_future_seconds - (time.time_ns()*1e-9)) #sleep for the difference between load time and now (to allow for loading)
                 except ValueError:
                     pass
                 self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load)
@@ -1173,22 +1183,17 @@ class CosmicFengine():
         self.delay_rate_to_load = np.array(delay_rates)
         self.phase_to_load = np.array(phases)
         self.phase_rate_to_load = np.array(phase_rates)
-        self.set_delays(clock_rate_hz, invert_band)
+        self.set_delays(delays, delay_rates, phases, phase_rates, clock_rate_hz, invert_band)
        
         #Handle the loading time/force loading of the delays
         if force_delay_load:
             self.delay.force_load()
             self.phaserotate.force_load()
         else:
-            print("Loading delays...")
             assert load_time > time.time(), f"""Cannot set a load time that is in the past"""   
             self.delay.set_target_load_time(int(load_time * FPGA_CLOCK_RATE_HZ))
             self.phaserotate.set_target_load_time(int(load_time * FPGA_CLOCK_RATE_HZ))
             self.logger.debug(f"""Firmware reports that coarse delays will be loaded in: 
-                                {self.delay.get_time_to_load()} FPGA clocks
-                                and fine delays in:
-                                {self.phaserotate.get_time_to_load()} FPGA clocks.""")
-            print(f"""Firmware reports that coarse delays will be loaded in: 
                                 {self.delay.get_time_to_load()} FPGA clocks
                                 and fine delays in:
                                 {self.phaserotate.get_time_to_load()} FPGA clocks.""")
