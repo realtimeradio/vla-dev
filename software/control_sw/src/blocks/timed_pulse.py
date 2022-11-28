@@ -64,8 +64,6 @@ class TimedPulse(Block):
         self.write_int('target_load_time_lsb', tt & 0xffffffff)
         if enable_trig:
             self.enable_tt_pulse()
-        else:
-            self.disable_tt_pulse()
 
     def get_target_tt(self):
         """
