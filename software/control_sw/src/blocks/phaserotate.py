@@ -326,13 +326,13 @@ class PhaseRotate(Block):
         assert len(phases) == self.n_chans, 'Phase calibration list must be %d elements long' % self.n_chans
         phases /= np.pi # Phases are in units of pi
         phases *= 2**self._CAL_PHASE_BP
-        assert self._PHASE_RATE_BW % 8 == 0
-        nbytes = self._PHASE_RATE_BW // 8
+        assert self._CAL_PHASE_BW % 8 == 0
+        nbytes = self._CAL_PHASE_BW // 8
         dtype = '>i%d' % nbytes # big-endian signed int
         phases = np.array(phases, dtype=dtype)
         self.write('fd%d_fd_fs_mux_cal' % stream, phases.tobytes())
 
-    def get_phase_cal(self, stream, phases):
+    def get_phase_cal(self, stream):
         """
         Get the phase calibration coefficients for a single input.
 
@@ -344,10 +344,10 @@ class PhaseRotate(Block):
         :rtype: list
         """
 
-        assert self._PHASE_RATE_BW % 8 == 0
-        nbytes = self._PHASE_RATE_BW // 8
+        assert self._CAL_PHASE_BW % 8 == 0
+        nbytes = self._CAL_PHASE_BW // 8
         dtype = '>i%d' % nbytes # big-endian signed int
-        raw = self.write('fd%d_fd_fs_mux_cal' % stream, nbytes*self.n_chans)
+        raw = self.read('fd%d_fd_fs_mux_cal' % stream, nbytes*self.n_chans)
         phases = np.fromstring(raw, dtype=dtype)
         return phases / 2**self._CAL_PHASE_BP * np.pi
 
