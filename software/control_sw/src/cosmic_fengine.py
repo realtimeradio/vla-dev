@@ -953,8 +953,6 @@ class CosmicFengine():
                 firm_phase[stream] = phase/phase_scale
                 firm_int_delay = self.delay.get_delay(stream)
                 firm_delay[stream] = firm_int_delay + firm_frac_delay
-                rate,scale = self.phaserotate.get_delay_rate(stream)
-                delay,scale = self.phaserotate.get_delay(stream)
                 
             exp_delay = (
                 (delay_to_load.astype(int) - delay_to_load%1 - (delay_rate_to_load * time_since_load)) * 1e-9 * 2048e6 
