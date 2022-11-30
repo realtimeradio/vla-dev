@@ -501,4 +501,5 @@ class PhaseRotate(Block):
                 self.set_phase(i, 0.0)
                 self.set_delay(i, 0.0)
                 self.set_delay_rate(i, 0.0)
+                self.set_phase_cal(i,np.zeros(self.n_chans))
             self.force_load()
