@@ -298,7 +298,7 @@ class Packetizer(Block):
         return starts, payloads, indices, antchans
         
     def write_config(self, packet_starts, packet_payloads, channel_indices,
-            antenna_ids, dest_ips, dest_ports, nchans_per_packet):
+            antenna_ids, dest_ips, dest_ports, nchans_per_packet, enable=None):
         """
         Write the packetizer configuration BRAMs with appropriate entries.
 
@@ -308,7 +308,7 @@ class Packetizer(Block):
         :type packet_starts: list of int
 
         :param packet_payloads:
-            Word-indices which are data payloads, and should be mared as
+            Word-indices which are data payloads, and should be marked as
             valid (see `get_packet_info()`)
         :type packet_payloads: list of range()s
 
@@ -332,6 +332,10 @@ class Packetizer(Block):
         :param nchans_per_packet: Number of frequency channels per packet sent.
         :type nchans_per_packet: list of int
 
+        :param enable: List of booleans to enable each packet. If None, all
+            packets are assumed valid.
+        :type enable: list of bool
+
         All parameters should have identical lengths.
         """
         n_packets = len(packet_starts)
@@ -340,6 +344,9 @@ class Packetizer(Block):
             if len(x) != expected_len:
                 self._error("%s list length %d for %d packets" % (name, len(x), expected_len))
                 raise RuntimeError
+
+        if enable is None:
+            enable = [True] * n_packets
 
         check_length(packet_payloads, n_packets, 'packet_payloads')
         check_length(channel_indices, n_packets, 'channel_indices')
@@ -366,14 +373,14 @@ class Packetizer(Block):
 
         for p in range(n_packets):
             b = packet_starts[p]
-            headers[b]['first'] = True
+            headers[b]['first'] = (enable[p] and dest_ips[p] != '0.0.0.0')
             for j in packet_payloads[p]:
-                headers[j]['valid'] = dest_ips[p] != '0.0.0.0'
+                headers[j]['valid'] = (enable[p] and dest_ips[p] != '0.0.0.0')
                 headers[j]['n_chans'] = nchans_per_packet[p]
                 headers[j]['chan'] = channel_indices[p]
                 headers[j]['feng_id'] = antenna_ids[p]
                 headers[j]['dest_ip'] = dest_ips[p]
                 headers[j]['dest_port'] = dest_ports[p]
-            headers[packet_payloads[p][-1]]['last'] = True
+            headers[packet_payloads[p][-1]]['last'] = (enable[p] and dest_ips[p] != '0.0.0.0')
 
         self._populate_headers(headers)
