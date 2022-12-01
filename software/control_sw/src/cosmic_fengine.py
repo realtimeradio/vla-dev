@@ -980,16 +980,14 @@ class CosmicFengine():
                 
                 #fetch the firmware reported slope and delay (samples):
                 slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
-                firm_frac_delay = (-1.0 * slope/slope_scale if invert_band else slope/slope_scale)
+                firm_frac_delay = slope/slope_scale if invert_band else -1.0 * slope/slope_scale
                 phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
                 firm_phase[stream] = phase/phase_scale
                 firm_int_delay = self.delay.get_delay(stream)
                 firm_delay[stream] = firm_int_delay + firm_frac_delay
                 
-            exp_delay = (
-                (delay_to_load.astype(int) - delay_to_load%1 - (delay_rate_to_load * time_since_load)) * 1e-9 * 2048e6 
-                if invert_band else
-                (delay_to_load + (delay_rate_to_load * time_since_load)) * 1e-9 * 2048e6)
+            exp_delay = (delay_to_load + (delay_rate_to_load * time_since_load)) * 1e-9 * 2048e6
+
             exp_phase = np.zeros(self.delay.n_streams, dtype=float)
             try:
                 self.redis_obj.hset(
@@ -1166,7 +1164,8 @@ class CosmicFengine():
                 try:
                     time.sleep(t_future_seconds - (time.time_ns()*1e-9)) #sleep for the difference between load time and now (to allow for loading)
                 except ValueError:
-                    pass
+                    self.logger.warn(f"""Tried to sleep for negative time. Continuing...""")
+                    continue
                 self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load)
 
     #FOR TESTING ONLY
