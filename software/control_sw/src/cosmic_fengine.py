@@ -1124,12 +1124,12 @@ class CosmicFengine():
 
             else:
                 #No values received, load values on hand
-                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 1e-2)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
+                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 5e-2)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
                 t_future_seconds = t_future_fpga_clks / FPGA_CLOCK_RATE_HZ
                 
                 # with self._delay_lock:
                 if self.delay_track.is_set():
-                    loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"]) #calculate 1s into the future
+                    loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"])
                     delay_raterate = delay_coeffs["delay_raterate_nsps2"]
                     delay_rate = delay_coeffs["delay_rate_nsps"]
                     delay = delay_coeffs["delay_ns"]
