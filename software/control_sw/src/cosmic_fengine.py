@@ -1091,6 +1091,7 @@ class CosmicFengine():
             self.logger.error("""Unable to load calibration or geometric delays from 
             'META_calibrationDelays' and 'META_modelDelays', aborting thread...""")
             return
+        zeros = np.zeros(self.phaserotate.n_streams)
 
         #Open the outer while loop for the redis channel listener:
         while True:
@@ -1098,7 +1099,7 @@ class CosmicFengine():
                 break
 
             #Fetch message from subscribed channels
-            message = self.pubsub.get_message(timeout=0.001)
+            message = self.pubsub.get_message(timeout=0.0001)
 
             if message and "message" == message["type"]:
                 #New delay values received
@@ -1145,7 +1146,6 @@ class CosmicFengine():
                     phase_rate_to_load = zeros
                 else:
                     #Zero array
-                    zeros = np.zeros(self.phaserotate.n_streams)
                     delay_to_load = delay_calib
                     delay_rate_to_load = zeros
                     phase_to_load = zeros
