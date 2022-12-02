@@ -947,7 +947,7 @@ class CosmicFengine():
                 self.logger.error(f"Error encountered in settting delays and phases: {err}")
                 return
 
-    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, invert_band = False):
+    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, clock_rate_hz=2048000000, invert_band = False):
         """
         From the delay and delay rate values for this fengine instance, calculate an expected delay
         slope value for a given time. 
@@ -965,6 +965,9 @@ class CosmicFengine():
         :type phase_to_load: ndarray{float}
         :param phase_rates_to_load: The n_streams phase rates (radians/s) that the delay loading thread believes was loaded.
         :type phase_rates_to_load: ndarray{float}
+        :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
+            the observed PPS interval, which could fail if the PPS is unstable or not present.
+        :type clock_rate_hz: int
         :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
             apply a fractional delay which is the negative of the physical delay.
         :type invert_band: bool
@@ -983,7 +986,7 @@ class CosmicFengine():
             phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
             firm_phase[stream] = phase/phase_scale
             firm_int_delay = self.delay.get_delay(stream)
-            firm_delay[stream] = (firm_int_delay + firm_frac_delay) / (1e-9 * 2048e6)
+            firm_delay[stream] = (firm_int_delay + firm_frac_delay) / (1e-9 * clock_rate_hz)
             
         exp_delay = (delay_to_load + (delay_rate_to_load * time_since_load))
 
@@ -1125,7 +1128,7 @@ class CosmicFengine():
 
             else:
                 #No values received, load values on hand
-                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 5e-2)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
+                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 1e-2)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
                 t_future_seconds = t_future_fpga_clks / FPGA_CLOCK_RATE_HZ
                 
                 # with self._delay_lock:
@@ -1152,7 +1155,8 @@ class CosmicFengine():
                     phase_rate_to_load = zeros
 
                 #Load delays:
-                self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load)
+                self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, 
+                                clock_rate_hz=2048000000, invert_band = False)
                 
                 if(t_future_seconds > (time.time_ns()*1e-9)):
                     self.delay.set_target_load_time(t_future_fpga_clks)
@@ -1161,11 +1165,13 @@ class CosmicFengine():
                     self.logger.warn(f"""Delays calculated for time {t_future_seconds} is in the past. Continuing...""")
                     continue
                 try:
-                    time.sleep(t_future_seconds - (time.time_ns()*1e-9)) #sleep for the difference between load time and now (to allow for loading)
+                    #sleep till time to load == 0 (to allow for loading)
+                    time.sleep(self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ) 
                 except ValueError:
                     self.logger.warn(f"""Tried to sleep for negative time. Continuing...""")
                     continue
-                self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load)
+                self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
+                                        clock_rate_hz=2048000000, invert_band = False)
 
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, load_time=None, clock_rate_hz=2048000000, invert_band=False):
