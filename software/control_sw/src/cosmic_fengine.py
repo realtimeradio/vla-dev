@@ -1019,8 +1019,12 @@ class CosmicFengine():
         if not self.delay_tracking_thread.is_alive():
             self.logger.error(f"Delay tracking thread is stopped. Ignoring request.")
             return
-        self.delay_switch.clear()
-        self.delay_tracking_thread.join()
+        else:
+            self.delay_switch.clear()
+            self.logger.info("Stopping delay tracking thread...")
+            self.delay_tracking_thread.join(1)
+            if self.delay_tracking_thread.is_alive():
+                self.logger.error("Delay tracking thread not stopped in the 2 seconds allowed for joining, please retry...")
 
         #Unsubscribe to the required redis channels
         if self.redis_obj is not None:
@@ -1070,6 +1074,7 @@ class CosmicFengine():
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
+        self.logger.info("Starting delay tracking thread...")
         self.delay_tracking_thread.start()
 
     def delay_tracking(self):
@@ -1082,7 +1087,6 @@ class CosmicFengine():
         phase and phase_rate values to upload to the F-Engine. When delay_track is cleared, this function will continuously 
         load the calibration delays to the F-Engine.
         """
-        # with self._redis_lock:
         try:
             delay_calib = np.fromiter(json.loads(self.redis_obj.hget
                                 ("META_calibrationDelays", f"{self.fpga.get_connected_antname()}"
@@ -1096,16 +1100,25 @@ class CosmicFengine():
             return
         zeros = np.zeros(self.phaserotate.n_streams)
 
+        #check that telescope time is correct:
+        if not np.isclose(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ,time.time(),atol=1e-1):
+            self.logger.error(f"""
+            FPGA is reporting telescope time: 
+            {time.ctime(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ)} = {self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ}s 
+            which is not close to current NTP time:
+            {time.ctime(time.time())} = {time.time()}s. Aborting thread...""")
+            return
+
         #Open the outer while loop for the redis channel listener:
         while True:
             if not self.delay_switch.is_set():
+                self.logger.info("Delay switch is cleared, breaking out of main loop.")
                 break
 
             #Fetch message from subscribed channels
             message = self.pubsub.get_message(timeout=0.0001)
 
             if message and "message" == message["type"]:
-                #New delay values received
                 try:
                     message_data = json.loads(message.get('data'))
                 except:
@@ -1165,8 +1178,8 @@ class CosmicFengine():
                     self.logger.warn(f"""Delays calculated for time {t_future_seconds} is in the past. Continuing...""")
                     continue
                 try:
-                    #sleep till time to load == 0 (to allow for loading)
-                    time.sleep(self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ) 
+                    # sleep till time to load == 0 (to allow for loading)
+                    time.sleep(self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ)  
                 except ValueError:
                     self.logger.warn(f"""Tried to sleep for negative time. Continuing...""")
                     continue
