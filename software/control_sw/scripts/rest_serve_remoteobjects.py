@@ -99,4 +99,4 @@ if __name__ == '__main__':
                 feng._initialize_blocks()
                 print(f'\tInitialized `{object_id}`...')
 
-    serve(app, host='0.0.0.0', port=6000)
+    serve(app, host='0.0.0.0', port=6000, threads=8)
