@@ -118,7 +118,8 @@ class CosmicFengine():
         #Thread init stuff
         self.delay_switch = threading.Event()
         self.delay_track = threading.Event()
-        self.delay_halfon = threading.Event()
+        self.delay_halfoff = threading.Event()
+        self.delay_halfcal = threading.Event()
         self.delay_monitor = threading.Event()
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
@@ -1158,10 +1159,14 @@ class CosmicFengine():
                     # dT/dt = 2ax + b
                     delay_rate_to_load = np.array([delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams)
 
-                    #half on state
-                    if self.delay_halfon.is_set():
-                        delay_to_load[0:2] = delay_calib[0:2]
+                    #half delay off state 
+                    if self.delay_halfoff.is_set():
+                        delay_to_load[0:2] = 0.0
                         delay_rate_to_load[0:2] = 0.0 
+                    #half calibration delay state
+                    elif self.delay_halfcal.is_set():
+                        delay_to_load[0:2] = delay_calib[0:2]
+                        delay_rate_to_load[0:2] = 0.0
 
                     # phase:
                     phase_to_load = zeros
