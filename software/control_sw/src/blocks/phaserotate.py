@@ -20,6 +20,9 @@ class PhaseRotate(Block):
     :param n_streams: Number of independent streams which may be shifted
     :type n_streams: int
 
+    :param n_chans: Number of frequency channels per signal.
+    :type n_chans: int
+
     :param samplehz: The ADC sample rate in MHz
     :type samplehz: float
 
@@ -32,6 +35,8 @@ class PhaseRotate(Block):
     _PHASE_BP = 31
     _PHASE_RATE_BW=32
     _PHASE_RATE_BP=31
+    _CAL_PHASE_BW = 16
+    _CAL_PHASE_BP = 15
     _FIRMWARE_PHASE_BP = 31
     _FIRMWARE_SLOPE_BP = 31
 
@@ -46,11 +51,12 @@ class PhaseRotate(Block):
     FINE_DELAY_LOAD_PERIOD = 4 # It takes 4 spectra to compute and load delays
     RATE_SCALE_FACTOR = 2**5   # The firmware divides rates down by this amount
 
-    def __init__(self, host, name, n_streams=4, samplehz=2048000000, logger=None):
+    def __init__(self, host, name, n_streams=4, samplehz=2048000000, n_chans=1024, logger=None):
         super(PhaseRotate, self).__init__(host, name, logger)
         self.timer = TimedPulse(host, name+"_timing", logger)
         self.n_streams = n_streams
         self.samplehz = samplehz
+        self.n_chans = n_chans
 
     def set_delay(self, stream, delay):
         """
@@ -301,6 +307,47 @@ class PhaseRotate(Block):
 
         return val, (2**self._PHASE_RATE_BP * self.RATE_SCALE_FACTOR * self.FINE_DELAY_LOAD_PERIOD)
 
+    def set_phase_cal(self, stream, phases):
+        """
+        Set the phase calibration coefficients for a single input.
+
+        :param stream: ADC stream index for which the calibration phases should be applied.
+        :type stream: int
+
+        :param phases: numpy array or list of phases to apply, in units of radians.
+            phase[i] is the phase which should be applied to frequency channel i.
+        :type phases: list or numpy.ndarray
+        """
+
+        phases = np.array(phases)
+        assert len(phases) == self.n_chans, 'Phase calibration list must be %d elements long' % self.n_chans
+        phases /= np.pi # Phases are in units of pi
+        phases *= 2**self._CAL_PHASE_BP
+        assert self._CAL_PHASE_BW % 8 == 0
+        nbytes = self._CAL_PHASE_BW // 8
+        dtype = '>i%d' % nbytes # big-endian signed int
+        phases = np.array(phases, dtype=dtype)
+        self.write('fd%d_fd_fs_mux_cal' % stream, phases.tobytes())
+
+    def get_phase_cal(self, stream):
+        """
+        Get the phase calibration coefficients for a single input.
+
+        :param stream: ADC stream index for which the calibration phases should be applied.
+        :type stream: int
+
+        :return phases: list of phases being applied, in units of radians.
+            phase[i] is the phase which is applied to frequency channel i.
+        :rtype: list
+        """
+
+        assert self._CAL_PHASE_BW % 8 == 0
+        nbytes = self._CAL_PHASE_BW // 8
+        dtype = '>i%d' % nbytes # big-endian signed int
+        raw = self.read('fd%d_fd_fs_mux_cal' % stream, nbytes*self.n_chans)
+        phases = np.fromstring(raw, dtype=dtype)
+        return phases / 2**self._CAL_PHASE_BP * np.pi
+
     def get_firmware_slope(self, stream):
         """
         Retrieve the firmware reported slope in samples for a given stream.
@@ -451,4 +498,5 @@ class PhaseRotate(Block):
                 self.set_phase(i, 0.0)
                 self.set_delay(i, 0.0)
                 self.set_delay_rate(i, 0.0)
+                self.set_phase_cal(i,np.zeros(self.n_chans))
             self.force_load()

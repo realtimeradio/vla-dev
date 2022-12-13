@@ -118,6 +118,8 @@ class CosmicFengine():
         #Thread init stuff
         self.delay_switch = threading.Event()
         self.delay_track = threading.Event()
+        self.delay_halfoff = threading.Event()
+        self.delay_halfcal = threading.Event()
         self.delay_monitor = threading.Event()
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
@@ -263,13 +265,17 @@ class CosmicFengine():
         self.chanreorder = chanreorder.ChanReorder(self._cfpga, 'pipeline%d_reorder' % self.pipeline_id,
                 n_times=NTIME_PACKET, n_ants=4, n_chans=NCHANS, n_parallel_chans=16)
 
-        #: Control interface to Packetizerblock
+        #: Control interface to Packetizer blocks
         # 8 signals = 4 IFs (only half are real)
-        self.packetizer = packetizer.Packetizer(self._cfpga,
-                'pipeline%d_packetizer0' % self.pipeline_id,
+        self.packetizers = []
+        for i in range(self.neths):
+            self.packetizers += [packetizer.Packetizer(self._cfpga,
+                'pipeline%d_packetizer%d' % (self.pipeline_id, i),
                 n_chans=NCHANS, n_ants=4, sample_rate_mhz=2048,
                 sample_width=2, word_width=64, line_rate_gbps=100.,
-                n_time_packet=NTIME_PACKET, granularity=4)
+                n_time_packet=NTIME_PACKET, granularity=4)]
+        for packetizern, packetizerblock in enumerate(self.packetizers):
+            setattr(self, 'packetizer%d' % packetizern, packetizerblock)
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
@@ -297,6 +303,8 @@ class CosmicFengine():
             'corr'        : self.corr,
             'chanreorder' : self.chanreorder,
         }
+        for pn, packetizerdev in enumerate(self.packetizers):
+            self.blocks['packetizer%d' % pn] = packetizerdev
         for en, ethdev in enumerate(self.eths):
             self.blocks['eth%d' % en] = ethdev
 
@@ -557,6 +565,7 @@ class CosmicFengine():
                 dest_ip = xeng.split('-')[0]
                 dest_port = int(xeng.split('-')[1])
                 chan_range = v['chan_range']
+                interface_id = v.get('ethport', 0)
                 start_chan = chan_range[0]
                 nchan = chan_range[1] - start_chan
                 if 'feng_mask' in v:
@@ -569,7 +578,9 @@ class CosmicFengine():
                 for f in feng_ids:
                     if f in fengs_this_dest:
                         fengs_to_send += [f]
-                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan, 'nchan':nchan, 'feng_ids':fengs_to_send}]
+                dests += [{'ip':dest_ip, 'port':dest_port, 'start_chan':start_chan,
+                           'nchan':nchan, 'feng_ids':fengs_to_send,
+                           'interface_id':interface_id}]
         except:
             self.logger.exception("Failed to parse output configuration file %s" % config_file)
             raise
@@ -657,6 +668,8 @@ class CosmicFengine():
                 ``nchans`` should be a multiple of ``chans_per_packet``.
               - 'feng_ids': The identifying numbers of the antenna-streams,
                 as interpreted by the destination. 1 per tuning/input.
+              - 'interface_id': The zero-indexed output interface ID from which these
+                data should be transmitted.
         :type dests: List of dict
 
         :param dts_lane_map: If not None, override the default DTS lane mapping as part of
@@ -723,7 +736,7 @@ class CosmicFengine():
 
         for sn, source_ip in enumerate(source_ips):
             if sn >= self.neths:
-                self.logger.warning('Skipping setting Ethernet interface %d of %d' % (sn, self.neths))
+                self.logger.warning('Skipping setting Ethernet interface with ID %d' % (sn))
                 continue
             mac = MAC_BASE + int(source_ip.split('.')[-1])
             self.eths[sn].configure_source(mac, source_ip, source_port)
@@ -752,7 +765,7 @@ class CosmicFengine():
         self.logger.debug("Channels to send by FID: %s" % (str(channels_to_send_by_fid)))
         self.logger.debug("Largest number of chans with one destination: %d" % channels_to_send)
 
-        pkt_starts, pkt_payloads, word_indices, antchans = self.packetizer.get_packet_info(chans_per_packet, channels_to_send, ninput)
+        pkt_starts, pkt_payloads, word_indices, antchans = self.packetizers[0].get_packet_info(chans_per_packet, channels_to_send, ninput)
         n_pkts = len(pkt_starts)
         antchan_indices = np.arange(n_pkts*chans_per_packet, dtype=int)[::chans_per_packet]
         chan_indices = antchan_indices % channels_to_send
@@ -773,6 +786,7 @@ class CosmicFengine():
         ips = ['0.0.0.0' for _ in range(n_pkts)]
         feng_ids = [-1 for _ in range(n_pkts)]
         ports = [0 for _ in range(n_pkts)]
+        interface_ids = [False for _ in range(n_pkts)]
         pkt_num = 0
         ok = True
         for dn, dest in enumerate(dests):
@@ -785,6 +799,7 @@ class CosmicFengine():
                 if dest_ip not in macs:
                    self.logger.critical("MAC address for IP %s is not known" % dest_ip)
                 dest_port = dest['port']
+                interface_id = dest['interface_id']
                 # loop over packets to this destination, antenna slowest, chan fastest
                 for ant in range(ninput):
                     for cn, chan in enumerate(chans[::chans_per_packet]):
@@ -797,6 +812,7 @@ class CosmicFengine():
                         chan_indices[pkt_num] = chan
                         ips[pkt_num] = dest_ip
                         ports[pkt_num] = dest_port
+                        interface_ids[pkt_num] = interface_id
                         # Use the order maps to figure out where we should put these antchans
                         ant_id = feng_ids[pkt_num] % ninput # TODO: is this right?
                         ant_order[antchans[pkt_num]] = ant_id
@@ -809,7 +825,8 @@ class CosmicFengine():
 
         if ok:
             self.chanreorder.set_antchan_order(ant_order, chan_order)
-            self.packetizer.write_config(
+            for pn, packetizer in enumerate(self.packetizers):
+                packetizer.write_config(
                     pkt_starts,
                     pkt_payloads,
                     chan_indices.tolist(),
@@ -817,6 +834,7 @@ class CosmicFengine():
                     ips,
                     ports,
                     [chans_per_packet]*n_pkts,
+                    [x==pn for x in interface_ids],
                     )
         else:
             self.logger.error("Not configuring Ethernet output because configuration builder failed")
@@ -931,7 +949,7 @@ class CosmicFengine():
                 self.logger.error(f"Error encountered in settting delays and phases: {err}")
                 return
 
-    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, invert_band = False):
+    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, clock_rate_hz=2048000000, invert_band = False):
         """
         From the delay and delay rate values for this fengine instance, calculate an expected delay
         slope value for a given time. 
@@ -949,6 +967,9 @@ class CosmicFengine():
         :type phase_to_load: ndarray{float}
         :param phase_rates_to_load: The n_streams phase rates (radians/s) that the delay loading thread believes was loaded.
         :type phase_rates_to_load: ndarray{float}
+        :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
+            the observed PPS interval, which could fail if the PPS is unstable or not present.
+        :type clock_rate_hz: int
         :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
             apply a fractional delay which is the negative of the physical delay.
         :type invert_band: bool
@@ -957,41 +978,38 @@ class CosmicFengine():
         firm_delay = np.zeros(self.delay.n_streams, dtype=float)
         firm_phase = np.zeros(self.delay.n_streams, dtype=float)
 
-        while True:
-            #here we can be sure the time is in the past (negative)
-            time_since_load = -1.0 * self.phaserotate.get_time_to_load() / FPGA_CLOCK_RATE_HZ # fpga_clks -> s
-            for stream in range(self.phaserotate.n_streams):
-                
-                #fetch the firmware reported slope and delay (samples):
-                slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
-                firm_frac_delay = (-1.0 * slope/slope_scale if invert_band else slope/slope_scale)
-                phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
-                firm_phase[stream] = phase/phase_scale
-                firm_int_delay = self.delay.get_delay(stream)
-                firm_delay[stream] = firm_int_delay + firm_frac_delay
-                
-            exp_delay = (
-                (delay_to_load.astype(int) - delay_to_load%1 - (delay_rate_to_load * time_since_load)) * 1e-9 * 2048e6 
-                if invert_band else
-                (delay_to_load + (delay_rate_to_load * time_since_load)) * 1e-9 * 2048e6)
-            exp_phase = np.zeros(self.delay.n_streams, dtype=float)
-            try:
-                self.redis_obj.hset(
-                    "FENG_delayStatus",
-                    f"{self.fpga.get_connected_antname()}",
-                    json.dumps({
-                        "expected_delay" : np.round(exp_delay,decimals=4).tolist(),
-                        "expected_phase" : np.round(exp_phase,decimals=4).tolist(),
-                        "firmware_delay" : np.round(firm_delay,decimals=4).tolist(),
-                        "firmware_phase" : np.round(firm_phase,decimals=4).tolist(),
-                        "delay_correct"  : np.isclose(exp_delay,firm_delay,atol=1e-3).tolist(),
-                        "phase_correct"  : np.isclose(exp_phase,firm_phase,atol=1e-3).tolist(),
-                        "time_since_load_sec" : round(time_since_load,8)
-                        })
-                    )
-            except:
-                self.logger.error("Delay monitor unable to post to redis hash FENG_delayStatus.")
-            return
+        #here we can be sure the time is in the past (negative)
+        time_since_load = -1.0 * self.phaserotate.get_time_to_load() / FPGA_CLOCK_RATE_HZ # fpga_clks -> s
+        for stream in range(self.phaserotate.n_streams):
+            
+            #fetch the firmware reported slope and delay (samples):
+            slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
+            firm_frac_delay = slope/slope_scale if invert_band else -1.0 * slope/slope_scale
+            phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
+            firm_phase[stream] = phase/phase_scale
+            firm_int_delay = self.delay.get_delay(stream)
+            firm_delay[stream] = (firm_int_delay + firm_frac_delay) / (1e-9 * clock_rate_hz)
+            
+        exp_delay = (delay_to_load + (delay_rate_to_load * time_since_load))
+
+        exp_phase = np.zeros(self.delay.n_streams, dtype=float)
+        try:
+            self.redis_obj.hset(
+                "FENG_delayStatus",
+                f"{self.fpga.get_connected_antname()}",
+                json.dumps({
+                    "expected_delay_ns" : np.round(exp_delay,decimals=4).tolist(),
+                    "expected_phase_rad" : np.round(exp_phase,decimals=4).tolist(),
+                    "firmware_delay_ns" : np.round(firm_delay,decimals=4).tolist(),
+                    "firmware_phase_rad" : np.round(firm_phase,decimals=4).tolist(),
+                    "delay_correct"  : np.isclose(exp_delay,firm_delay,atol=1e-3).tolist(),
+                    "phase_correct"  : np.isclose(exp_phase,firm_phase,atol=1e-3).tolist(),
+                    "time_since_load_sec" : round(time_since_load,8)
+                    })
+                )
+        except:
+            self.logger.error("Delay monitor unable to post to redis hash FENG_delayStatus.")
+        return
 
     def stop_delay_tracking(self):
         """
@@ -1003,8 +1021,12 @@ class CosmicFengine():
         if not self.delay_tracking_thread.is_alive():
             self.logger.error(f"Delay tracking thread is stopped. Ignoring request.")
             return
-        self.delay_switch.clear()
-        self.delay_tracking_thread.join()
+        else:
+            self.delay_switch.clear()
+            self.logger.info("Stopping delay tracking thread...")
+            self.delay_tracking_thread.join(1)
+            if self.delay_tracking_thread.is_alive():
+                self.logger.error("Delay tracking thread not stopped in the 2 seconds allowed for joining, please retry...")
 
         #Unsubscribe to the required redis channels
         if self.redis_obj is not None:
@@ -1054,6 +1076,7 @@ class CosmicFengine():
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
+        self.logger.info("Starting delay tracking thread...")
         self.delay_tracking_thread.start()
 
     def delay_tracking(self):
@@ -1066,7 +1089,6 @@ class CosmicFengine():
         phase and phase_rate values to upload to the F-Engine. When delay_track is cleared, this function will continuously 
         load the calibration delays to the F-Engine.
         """
-        # with self._redis_lock:
         try:
             delay_calib = np.fromiter(json.loads(self.redis_obj.hget
                                 ("META_calibrationDelays", f"{self.fpga.get_connected_antname()}"
@@ -1078,17 +1100,27 @@ class CosmicFengine():
             self.logger.error("""Unable to load calibration or geometric delays from 
             'META_calibrationDelays' and 'META_modelDelays', aborting thread...""")
             return
+        zeros = np.zeros(self.phaserotate.n_streams)
+
+        #check that telescope time is correct:
+        if not np.isclose(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ,time.time(),atol=1e-1):
+            self.logger.error(f"""
+            FPGA is reporting telescope time: 
+            {time.ctime(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ)} = {self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ}s 
+            which is not close to current NTP time:
+            {time.ctime(time.time())} = {time.time()}s. Aborting thread...""")
+            return
 
         #Open the outer while loop for the redis channel listener:
         while True:
             if not self.delay_switch.is_set():
+                self.logger.info("Delay switch is cleared, breaking out of main loop.")
                 break
 
             #Fetch message from subscribed channels
-            message = self.pubsub.get_message(timeout=0.001)
+            message = self.pubsub.get_message(timeout=0.0001)
 
             if message and "message" == message["type"]:
-                #New delay values received
                 try:
                     message_data = json.loads(message.get('data'))
                 except:
@@ -1111,12 +1143,12 @@ class CosmicFengine():
 
             else:
                 #No values received, load values on hand
-                t_future_fpga_clks =  int((time.time_ns() * 1e-9 + 1e-2) * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
+                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 1e-2)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
                 t_future_seconds = t_future_fpga_clks / FPGA_CLOCK_RATE_HZ
                 
                 # with self._delay_lock:
                 if self.delay_track.is_set():
-                    loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"]) #calculate 1s into the future
+                    loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"])
                     delay_raterate = delay_coeffs["delay_raterate_nsps2"]
                     delay_rate = delay_coeffs["delay_rate_nsps"]
                     delay = delay_coeffs["delay_ns"]
@@ -1127,20 +1159,29 @@ class CosmicFengine():
                     # dT/dt = 2ax + b
                     delay_rate_to_load = np.array([delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams)
 
+                    #half delay off state 
+                    if self.delay_halfoff.is_set():
+                        delay_to_load[0:2] = 0.0
+                        delay_rate_to_load[0:2] = 0.0 
+                    #half calibration delay state
+                    elif self.delay_halfcal.is_set():
+                        delay_to_load[0:2] = delay_calib[0:2]
+                        delay_rate_to_load[0:2] = 0.0
+
                     # phase:
                     phase_to_load = zeros
                     phase_rate_to_load = zeros
                 else:
                     #Zero array
-                    zeros = np.zeros(self.phaserotate.n_streams)
                     delay_to_load = delay_calib
                     delay_rate_to_load = zeros
                     phase_to_load = zeros
                     phase_rate_to_load = zeros
 
                 #Load delays:
-                self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load)
-
+                self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, 
+                                clock_rate_hz=2048000000, invert_band = False)
+                
                 if(t_future_seconds > (time.time_ns()*1e-9)):
                     self.delay.set_target_load_time(t_future_fpga_clks)
                     self.phaserotate.set_target_load_time(t_future_fpga_clks)
@@ -1148,10 +1189,13 @@ class CosmicFengine():
                     self.logger.warn(f"""Delays calculated for time {t_future_seconds} is in the past. Continuing...""")
                     continue
                 try:
-                    time.sleep(t_future_seconds - (time.time_ns()*1e-9)) #sleep for the difference between load time and now (to allow for loading)
+                    # sleep till time to load == 0 (to allow for loading)
+                    time.sleep(self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ)  
                 except ValueError:
-                    pass
-                self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load)
+                    self.logger.warn(f"""Tried to sleep for negative time. Continuing...""")
+                    continue
+                self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
+                                        clock_rate_hz=2048000000, invert_band = False)
 
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, load_time=None, clock_rate_hz=2048000000, invert_band=False):
@@ -1313,18 +1357,21 @@ class CosmicFengine():
             for stream, _ in enumerate(lo_delay_list)
         ]
 
-    def read_chan_dest_ips_as_json(self):
+    def read_chan_dest_ips_as_json(self, portnum):
         '''
         Reads the headers of the packetizer block and constructs a summative
         report of the channels' destination-IPs, as a json string.
+
+        :param portnum: Which zero-indexed output interface to query.
+        :type portnum: int
         '''
-        if not hasattr(self, 'packetizer'):
+        if not hasattr(self, 'packetizers'):
             return '[]'
         
         if not any([eth.tx_enabled() for eth in self.eths]):
             return '[]'
 
-        headers = self.packetizer._read_headers()
+        headers = self.packetizers[portnum]._read_headers()
         
         packet_dest_ips = []
         for header in headers:

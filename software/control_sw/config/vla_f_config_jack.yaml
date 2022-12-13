@@ -46,7 +46,7 @@ xengines:
             chan_range: [64,128]
             ethport: 0
     192.168.64.0-11111:
-            feng_range_mask: [0,8,2] # Odd Feng-IDs
+            feng_range_mask: [0,8,2] # Even Feng-IDs
             # Give [x,y] to send channel range range(x,y)
             chan_range: [128,192]
             ethport: 0

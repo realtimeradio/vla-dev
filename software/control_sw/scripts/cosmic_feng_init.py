@@ -31,6 +31,8 @@ def main():
                         help='Path to .fpg firmware file')
     parser.add_argument('-R','--remote', type=str, default=None,
                         help='URI to remote REST server')
+    parser.add_argument('--neth', type=int, default=1,
+                        help='Number of Ethernet outputs possessed by this pipeline')
     parser.add_argument('fpga_id', type=str, default=0,
                         help='FPGA pcie card ID')
     parser.add_argument('pipeline_id', type=int, default=0,
@@ -39,7 +41,7 @@ def main():
 
 
     f = cosmic_fengine.CosmicFengine(
-        args.fpga_id, args.fpgfile, pipeline_id=args.pipeline_id,
+        args.fpga_id, args.fpgfile, pipeline_id=args.pipeline_id, neths=args.neth,
         remote_uri=args.remote
     )
 
