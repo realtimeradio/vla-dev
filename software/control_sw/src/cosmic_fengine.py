@@ -1161,9 +1161,7 @@ class CosmicFengine():
                     eff_lo_0 = delay_coeffs["effective_lo_0_hz"] / 1e9 # gigahertz
                     eff_lo_1 = delay_coeffs["effective_lo_1_hz"] / 1e9 # gigahertz
                     phase_to_load = np.concatenate(((2*np.pi) * delay_to_load[0:2] * eff_lo_0 , (2*np.pi) * delay_to_load[2:4] * eff_lo_1),axis=0)
-                    print("PHASE TO LOAD: ", phase_to_load)
                     phase_rate_to_load = np.concatenate(((2*np.pi) * delay_rate_to_load[0:2] * eff_lo_0, (2*np.pi) * delay_rate_to_load[2:4] * eff_lo_1),axis=0)
-                    print("PHASE RATE TO LOAD: ", phase_rate_to_load)
 
                     #half delay off state 
                     if self.delay_halfoff.is_set():
