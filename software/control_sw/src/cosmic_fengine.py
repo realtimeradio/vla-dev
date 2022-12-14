@@ -120,7 +120,7 @@ class CosmicFengine():
         self.delay_track = threading.Event()
         self.delay_halfoff = threading.Event()
         self.delay_halfcal = threading.Event()
-        self.delay_monitor = threading.Event()
+        self.delay_halfphase = threading.Event()
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
@@ -468,7 +468,6 @@ class CosmicFengine():
         """
         if self.delay_tracking_thread.is_alive():
             self.stop_delay_tracking()
-            self.stop_delay_monitoring()
         if fpgfile is None:
             fpgfile = self.fpgfile
 
@@ -986,13 +985,13 @@ class CosmicFengine():
             slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
             firm_frac_delay = slope/slope_scale if invert_band else -1.0 * slope/slope_scale
             phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
-            firm_phase[stream] = phase/phase_scale
+            firm_phase[stream] = (phase/phase_scale) * np.pi
             firm_int_delay = self.delay.get_delay(stream)
             firm_delay[stream] = (firm_int_delay + firm_frac_delay) / (1e-9 * clock_rate_hz)
             
         exp_delay = (delay_to_load + (delay_rate_to_load * time_since_load))
+        exp_phase = phase_to_load + (phase_rate_to_load * time_since_load)
 
-        exp_phase = np.zeros(self.delay.n_streams, dtype=float)
         try:
             self.redis_obj.hset(
                 "FENG_delayStatus",
@@ -1138,7 +1137,6 @@ class CosmicFengine():
                             )).values(),dtype=float)
                         except BaseException:
                             self.logger.error("Unable to load calibration delays from 'META_calibrationDelays', Continuing...")
-                            self.redis_fetch_attempts += 1
                             continue
 
             else:
@@ -1159,6 +1157,14 @@ class CosmicFengine():
                     # dT/dt = 2ax + b
                     delay_rate_to_load = np.array([delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams)
 
+                    #phase (calculated per tuning)
+                    eff_lo_0 = delay_coeffs["effective_lo_0_hz"] / 1e9 # gigahertz
+                    eff_lo_1 = delay_coeffs["effective_lo_1_hz"] / 1e9 # gigahertz
+                    phase_to_load = np.concatenate(((2*np.pi) * delay_to_load[0:2] * eff_lo_0 , (2*np.pi) * delay_to_load[2:4] * eff_lo_1),axis=0)
+                    print("PHASE TO LOAD: ", phase_to_load)
+                    phase_rate_to_load = np.concatenate(((2*np.pi) * delay_rate_to_load[0:2] * eff_lo_0, (2*np.pi) * delay_rate_to_load[2:4] * eff_lo_1),axis=0)
+                    print("PHASE RATE TO LOAD: ", phase_rate_to_load)
+
                     #half delay off state 
                     if self.delay_halfoff.is_set():
                         delay_to_load[0:2] = 0.0
@@ -1167,10 +1173,10 @@ class CosmicFengine():
                     elif self.delay_halfcal.is_set():
                         delay_to_load[0:2] = delay_calib[0:2]
                         delay_rate_to_load[0:2] = 0.0
-
-                    # phase:
-                    phase_to_load = zeros
-                    phase_rate_to_load = zeros
+                    #half phase state
+                    if self.delay_halfphase.is_set():
+                        phase_to_load[0:2] = 0.0
+                        phase_rate_to_load[0:2] = 0.0
                 else:
                     #Zero array
                     delay_to_load = delay_calib
