@@ -985,12 +985,12 @@ class CosmicFengine():
             slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
             firm_frac_delay = slope/slope_scale if invert_band else -1.0 * slope/slope_scale
             phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
-            firm_phase[stream] = (phase/phase_scale) * np.pi
+            firm_phase[stream] = (phase/phase_scale)
             firm_int_delay = self.delay.get_delay(stream)
             firm_delay[stream] = (firm_int_delay + firm_frac_delay) / (1e-9 * clock_rate_hz)
             
         exp_delay = (delay_to_load + (delay_rate_to_load * time_since_load))
-        exp_phase = phase_to_load + (phase_rate_to_load * time_since_load)
+        exp_phase = ((phase_to_load + (phase_rate_to_load * time_since_load)) /np.pi + 1)%2 - 1
 
         try:
             self.redis_obj.hset(
@@ -1158,10 +1158,14 @@ class CosmicFengine():
                     delay_rate_to_load = np.array([delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams)
 
                     #phase (calculated per tuning)
-                    eff_lo_0 = delay_coeffs["effective_lo_0_hz"] / 1e9 # gigahertz
-                    eff_lo_1 = delay_coeffs["effective_lo_1_hz"] / 1e9 # gigahertz
-                    phase_to_load = np.concatenate(((2*np.pi) * delay_to_load[0:2] * eff_lo_0 , (2*np.pi) * delay_to_load[2:4] * eff_lo_1),axis=0)
-                    phase_rate_to_load = np.concatenate(((2*np.pi) * delay_rate_to_load[0:2] * eff_lo_0, (2*np.pi) * delay_rate_to_load[2:4] * eff_lo_1),axis=0)
+                    eff_lo_0 = delay_coeffs["effective_lo_0_hz"] * 1e-3 # gigahertz
+                    eff_lo_1 = delay_coeffs["effective_lo_1_hz"] * 1e-3 # gigahertz
+                    sideband_0 = delay_coeffs["sideband_0"]
+                    sideband_1 = delay_coeffs["sideband_1"]
+                    phase_to_load = np.concatenate(((2*np.pi) * sideband_0 * delay_to_load[0:2] * eff_lo_0 ,                 #tuning 0
+                                                    (2*np.pi) * sideband_1 * delay_to_load[2:4] * eff_lo_1),axis=0)          #tuning 1
+                    phase_rate_to_load = np.concatenate(((2*np.pi) * sideband_0 * delay_rate_to_load[0:2] * eff_lo_0,        #tuning 0
+                                                        (2*np.pi) * sideband_1 * delay_rate_to_load[2:4] * eff_lo_1),axis=0) #tuning 1
 
                     #half delay off state 
                     if self.delay_halfoff.is_set():
