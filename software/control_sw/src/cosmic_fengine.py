@@ -1162,9 +1162,9 @@ class CosmicFengine():
                     eff_lo_1 = delay_coeffs["effective_lo_1_hz"] * 1e-3 # gigahertz
                     sideband_0 = delay_coeffs["sideband_0"]
                     sideband_1 = delay_coeffs["sideband_1"]
-                    phase_to_load = np.concatenate(((2*np.pi) * sideband_0 * delay_to_load[0:2] * eff_lo_0 ,                 #tuning 0
+                    phase_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband_0 * delay_to_load[0:2] * eff_lo_0 ,                 #tuning 0
                                                     (2*np.pi) * sideband_1 * delay_to_load[2:4] * eff_lo_1),axis=0)          #tuning 1
-                    phase_rate_to_load = np.concatenate(((2*np.pi) * sideband_0 * delay_rate_to_load[0:2] * eff_lo_0,        #tuning 0
+                    phase_rate_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband_0 * delay_rate_to_load[0:2] * eff_lo_0,        #tuning 0
                                                         (2*np.pi) * sideband_1 * delay_rate_to_load[2:4] * eff_lo_1),axis=0) #tuning 1
 
                     #half delay off state 
