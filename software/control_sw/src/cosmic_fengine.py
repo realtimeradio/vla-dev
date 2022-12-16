@@ -121,6 +121,7 @@ class CosmicFengine():
         self.delay_halfoff = threading.Event()
         self.delay_halfcal = threading.Event()
         self.delay_halfphase = threading.Event()
+        self.delay_halfphasecorrection = threading.Event()
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
@@ -871,7 +872,7 @@ class CosmicFengine():
             f"{self.fpga.get_connected_antname()}_delays",
             "update_calibration_delays"]
 
-    def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, clock_rate_hz=2048000000, invert_band=False):
+    def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, phase_correction_factor, clock_rate_hz=2048000000, invert_band=False):
         """
         Transform the argument delays, delay rates, phases and phase rates before uploading them to the F-Engine.
         :param delay_to_load: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
@@ -891,6 +892,9 @@ class CosmicFengine():
         :param phase_rate_to_load: 4-tuple of phase_rates for X and Y polarizations for both tunings. Each value is
             the rate of change of phase, in radians per second. This is the incremental phase
             which should be added to the current phase each second.
+        :param phase_corrrection_factor: 4-long numpy array of factors which when multiplied by the coarse delay calculated
+            herein will yeild the second phase correction factor to be subtracted from phase_to_load. Units of this correction are in Hz.
+        :type phase_correction_factor: ndarray{float}
         :type phase_rate_to_load: ndarray{float}
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
@@ -918,6 +922,11 @@ class CosmicFengine():
                     delay_samples_int[if_id] = (np.ceil(delay_samples[if_id])).astype(int)
 
         delay_samples_frac = (delay_samples - delay_samples_int).astype(np.float)
+
+        #if applying the fshift phase correction to the phase
+        if self.delay_halfphasecorrection.is_set() and self.delay_halfphase.is_set():
+            phase_to_load -= phase_correction_factor * (delay_samples_int / clock_rate_hz)
+
         # Massage rates into samples-per-spectra (lots of redundant use of clock rate...)
         delay_rates_samples_per_spec = delay_rate_to_load * 1e-9 * (2* self.autocorr.n_chans)
         # Convert phases to range +/- pi and normalize
@@ -1162,6 +1171,10 @@ class CosmicFengine():
                     eff_lo_1 = delay_coeffs["effective_lo_1_hz"] * 1e-3 # gigahertz
                     sideband_0 = delay_coeffs["sideband_0"]
                     sideband_1 = delay_coeffs["sideband_1"]
+                    fshifts = np.array(delay_coeffs["lo_hz"])
+                    phase_correction_factor = np.concatenate(((2*np.pi) * sideband_0 * fshifts[0:2],                         #tuning 0
+                                                            (2*np.pi) * sideband_1 * fshifts[2:4]),axis=0)                   #tuning 1
+                    
                     phase_to_load = np.concatenate(((2*np.pi) * sideband_0 * delay_to_load[0:2] * eff_lo_0 ,                 #tuning 0
                                                     (2*np.pi) * sideband_1 * delay_to_load[2:4] * eff_lo_1),axis=0)          #tuning 1
                     phase_rate_to_load = np.concatenate(((2*np.pi) * sideband_0 * delay_rate_to_load[0:2] * eff_lo_0,        #tuning 0
@@ -1185,9 +1198,10 @@ class CosmicFengine():
                     delay_rate_to_load = zeros
                     phase_to_load = zeros
                     phase_rate_to_load = zeros
+                    phase_correction_factor = zeros
 
                 #Load delays:
-                self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, 
+                self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, phase_correction_factor,
                                 clock_rate_hz=2048000000, invert_band = False)
                 
                 if(t_future_seconds > (time.time_ns()*1e-9)):
