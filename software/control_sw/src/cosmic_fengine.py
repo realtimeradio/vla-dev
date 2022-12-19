@@ -1108,7 +1108,15 @@ class CosmicFengine():
             self.logger.error("""Unable to load calibration or geometric delays from 
             'META_calibrationDelays' and 'META_modelDelays', aborting thread...""")
             return
+            
         zeros = np.zeros(self.phaserotate.n_streams)
+        delay_raterate = delay_coeffs["delay_raterate_nsps2"]
+        delay_rate = delay_coeffs["delay_rate_nsps"]
+        delay = delay_coeffs["delay_ns"]
+        eff_lo = np.array([delay_coeffs["effective_lo_0_hz"], delay_coeffs["effective_lo_1_hz"]], dtype = float)* 1e-3 # gigahertz
+        sideband = np.array([delay_coeffs["sideband_0"], delay_coeffs["sideband_1"]], dtype = int)
+        fshifts = np.array(delay_coeffs["lo_hz"])
+        model_time = delay_coeffs["time_value"]
 
         #check that telescope time is correct:
         if not np.isclose(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ,time.time(),atol=1e-1):
@@ -1136,7 +1144,14 @@ class CosmicFengine():
                     continue
                 if self.delay_channel_names[0] == message['channel']:
                     #This is a delay value
-                    delay_coeffs = message_data
+                    delay_raterate = message_data["delay_raterate_nsps2"]
+                    delay_rate = message_data["delay_rate_nsps"]
+                    delay = message_data["delay_ns"]
+                    eff_lo = np.array([message_data["effective_lo_0_hz"], message_data["effective_lo_1_hz"]], dtype = float)* 1e-3 # gigahertz
+                    sideband = np.array([message_data["sideband_0"], message_data["sideband_1"]], dtype = int)
+                    fshifts = np.array(message_data["lo_hz"])
+                    model_time = delay_coeffs["time_value"]
+
                 if self.delay_channel_names[1] == message['channel']:
                     #Need to update delay calibration values
                     if message_data:
@@ -1155,10 +1170,8 @@ class CosmicFengine():
                 
                 # with self._delay_lock:
                 if self.delay_track.is_set():
-                    loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"])
-                    delay_raterate = delay_coeffs["delay_raterate_nsps2"]
-                    delay_rate = delay_coeffs["delay_rate_nsps"]
-                    delay = delay_coeffs["delay_ns"]
+                    loadtime_diff_modeltime = (t_future_seconds - model_time)
+
                     # T = ax^2 + bx + c + delay_calibrations
                     delay_to_load = (np.array([delay_raterate*(loadtime_diff_modeltime**2) + 
                                         delay_rate*loadtime_diff_modeltime + delay]*self.delay.n_streams) +
@@ -1167,18 +1180,13 @@ class CosmicFengine():
                     delay_rate_to_load = np.array([delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams)
 
                     #phase (calculated per tuning)
-                    eff_lo_0 = delay_coeffs["effective_lo_0_hz"] * 1e-3 # gigahertz
-                    eff_lo_1 = delay_coeffs["effective_lo_1_hz"] * 1e-3 # gigahertz
-                    sideband_0 = delay_coeffs["sideband_0"]
-                    sideband_1 = delay_coeffs["sideband_1"]
-                    fshifts = np.array(delay_coeffs["lo_hz"])
-                    phase_correction_factor = np.concatenate(((2*np.pi) * sideband_0 * fshifts[0:2],                         #tuning 0
-                                                            (2*np.pi) * sideband_1 * fshifts[2:4]),axis=0)                   #tuning 1
+                    phase_correction_factor = np.concatenate(((2*np.pi) * sideband[0] * fshifts[0:2],                         #tuning 0
+                                                            (2*np.pi) * sideband[1] * fshifts[2:4]),axis=0)                   #tuning 1
                     
-                    phase_to_load = np.concatenate(((2*np.pi) * sideband_0 * delay_to_load[0:2] * eff_lo_0 ,                 #tuning 0
-                                                    (2*np.pi) * sideband_1 * delay_to_load[2:4] * eff_lo_1),axis=0)          #tuning 1
-                    phase_rate_to_load = np.concatenate(((2*np.pi) * sideband_0 * delay_rate_to_load[0:2] * eff_lo_0,        #tuning 0
-                                                        (2*np.pi) * sideband_1 * delay_rate_to_load[2:4] * eff_lo_1),axis=0) #tuning 1
+                    phase_to_load = np.concatenate(((2*np.pi) * sideband[0] * delay_to_load[0:2] * eff_lo[0] ,                 #tuning 0
+                                                    (2*np.pi) * sideband[1] * delay_to_load[2:4] * eff_lo[1]),axis=0)          #tuning 1
+                    phase_rate_to_load = np.concatenate(((2*np.pi) * sideband[0] * delay_rate_to_load[0:2] * eff_lo[0],        #tuning 0
+                                                        (2*np.pi) * sideband[1] * delay_rate_to_load[2:4] * eff_lo[1]),axis=0) #tuning 1
 
                     #half delay off state 
                     if self.delay_halfoff.is_set():
