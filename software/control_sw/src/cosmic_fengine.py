@@ -872,7 +872,8 @@ class CosmicFengine():
             f"{self.fpga.get_connected_antname()}_delays",
             "update_calibration_delays"]
 
-    def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, phase_correction_factor, clock_rate_hz=2048000000, invert_band=False):
+    def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
+                    phase_correction_factor, clock_rate_hz=2048000000, invert_band=False):
         """
         Transform the argument delays, delay rates, phases and phase rates before uploading them to the F-Engine.
         :param delay_to_load: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
@@ -892,10 +893,10 @@ class CosmicFengine():
         :param phase_rate_to_load: 4-tuple of phase_rates for X and Y polarizations for both tunings. Each value is
             the rate of change of phase, in radians per second. This is the incremental phase
             which should be added to the current phase each second.
-        :param phase_corrrection_factor: 4-long numpy array of factors which when multiplied by the coarse delay calculated
+        :type phase_rate_to_load: ndarray{float}
+        :param phase_correction_factor: 4-long numpy array of factors which when multiplied by the coarse delay calculated
             herein will yeild the second phase correction factor to be subtracted from phase_to_load. Units of this correction are in Hz.
         :type phase_correction_factor: ndarray{float}
-        :type phase_rate_to_load: ndarray{float}
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
@@ -924,8 +925,8 @@ class CosmicFengine():
         delay_samples_frac = (delay_samples - delay_samples_int).astype(np.float)
 
         #if applying the fshift phase correction to the phase
-        if self.delay_halfphasecorrection.is_set() and self.delay_halfphase.is_set():
-            phase_to_load -= phase_correction_factor * (delay_samples_int / clock_rate_hz)
+        if self.delay_halfphasecorrection.is_set():
+            phase_to_load[2:4] -= phase_correction_factor[2:4] * (delay_samples_int[2:4] / clock_rate_hz)
 
         # Massage rates into samples-per-spectra (lots of redundant use of clock rate...)
         delay_rates_samples_per_spec = delay_rate_to_load * 1e-9 * (2* self.autocorr.n_chans)
@@ -957,7 +958,8 @@ class CosmicFengine():
                 self.logger.error(f"Error encountered in settting delays and phases: {err}")
                 return
 
-    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, clock_rate_hz=2048000000, invert_band = False):
+    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
+                            clock_rate_hz=2048000000, invert_band = False):
         """
         From the delay and delay rate values for this fengine instance, calculate an expected delay
         slope value for a given time. 
@@ -970,11 +972,11 @@ class CosmicFengine():
         :param delay_to_load: The n_streams ns delays that the delay loading thread believes was loaded.
         :type delay_to_load: ndarray{float}
         :param delay_rate_to_load: The n_streams ns/s delay rates that the delay loading thread believes was loaded.
-        :type delay_to_rates_load: ndarray{float}
+        :type delay_to_rate_load: ndarray{float}
         :param phase_to_load: The n_streams phases (radians) that the delay loading thread believes was loaded.
         :type phase_to_load: ndarray{float}
-        :param phase_rates_to_load: The n_streams phase rates (radians/s) that the delay loading thread believes was loaded.
-        :type phase_rates_to_load: ndarray{float}
+        :param phase_rate_to_load: The n_streams phase rates (radians/s) that the delay loading thread believes was loaded.
+        :type phase_rate_to_load: ndarray{float}
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
@@ -1108,7 +1110,7 @@ class CosmicFengine():
             self.logger.error("""Unable to load calibration or geometric delays from 
             'META_calibrationDelays' and 'META_modelDelays', aborting thread...""")
             return
-            
+
         zeros = np.zeros(self.phaserotate.n_streams)
         delay_raterate = delay_coeffs["delay_raterate_nsps2"]
         delay_rate = delay_coeffs["delay_rate_nsps"]
