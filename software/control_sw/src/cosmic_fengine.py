@@ -1115,7 +1115,7 @@ class CosmicFengine():
         delay_raterate = delay_coeffs["delay_raterate_nsps2"]
         delay_rate = delay_coeffs["delay_rate_nsps"]
         delay = delay_coeffs["delay_ns"]
-        eff_lo = np.array([delay_coeffs["effective_lo_0_hz"], delay_coeffs["effective_lo_1_hz"]], dtype = float)* 1e-3 # gigahertz
+        eff_lo = np.array([delay_coeffs["effective_lo_0_mhz"], delay_coeffs["effective_lo_1_mhz"]], dtype = float)* 1e-3 # gigahertz
         sideband = np.array([delay_coeffs["sideband_0"], delay_coeffs["sideband_1"]], dtype = int)
         fshifts = np.array(delay_coeffs["lo_hz"])
         model_time = delay_coeffs["time_value"]
@@ -1149,7 +1149,7 @@ class CosmicFengine():
                     delay_raterate = message_data["delay_raterate_nsps2"]
                     delay_rate = message_data["delay_rate_nsps"]
                     delay = message_data["delay_ns"]
-                    eff_lo = np.array([message_data["effective_lo_0_hz"], message_data["effective_lo_1_hz"]], dtype = float)* 1e-3 # gigahertz
+                    eff_lo = np.array([message_data["effective_lo_0_mhz"], message_data["effective_lo_1_mhz"]], dtype = float)* 1e-3 # gigahertz
                     sideband = np.array([message_data["sideband_0"], message_data["sideband_1"]], dtype = int)
                     fshifts = np.array(message_data["lo_hz"])
                     model_time = delay_coeffs["time_value"]
