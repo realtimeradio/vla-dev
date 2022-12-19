@@ -1182,13 +1182,14 @@ class CosmicFengine():
                     delay_rate_to_load = np.array([delay_raterate*2*loadtime_diff_modeltime + delay_rate]*self.delay.n_streams)
 
                     #phase (calculated per tuning)
-                    phase_correction_factor = np.concatenate(((2*np.pi) * sideband[0] * fshifts[0:2],                         #tuning 0
-                                                            (2*np.pi) * sideband[1] * fshifts[2:4]),axis=0)                   #tuning 1
+
+                    phase_correction_factor = np.concatenate(((2*np.pi) * sideband[0] * fshifts[0:2],                           #tuning 0
+                                                            (2*np.pi) * sideband[1] * fshifts[2:4]),axis=0)                     #tuning 1
                     
-                    phase_to_load = np.concatenate(((2*np.pi) * sideband[0] * delay_to_load[0:2] * eff_lo[0] ,                 #tuning 0
-                                                    (2*np.pi) * sideband[1] * delay_to_load[2:4] * eff_lo[1]),axis=0)          #tuning 1
-                    phase_rate_to_load = np.concatenate(((2*np.pi) * sideband[0] * delay_rate_to_load[0:2] * eff_lo[0],        #tuning 0
-                                                        (2*np.pi) * sideband[1] * delay_rate_to_load[2:4] * eff_lo[1]),axis=0) #tuning 1
+                    phase_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband[0] * delay_to_load[0:2] * eff_lo[0] ,           #tuning 0
+                                                    (2*np.pi) * sideband[1] * delay_to_load[2:4] * eff_lo[1]),axis=0)           #tuning 1
+                    phase_rate_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband[0] * delay_rate_to_load[0:2] * eff_lo[0],  #tuning 0
+                                                        (2*np.pi) * sideband[1] * delay_rate_to_load[2:4] * eff_lo[1]),axis=0)  #tuning 1
 
                     #half delay off state 
                     if self.delay_halfoff.is_set():
