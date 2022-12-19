@@ -895,7 +895,7 @@ class CosmicFengine():
             which should be added to the current phase each second.
         :type phase_rate_to_load: ndarray{float}
         :param phase_correction_factor: 4-long numpy array of factors which when multiplied by the coarse delay calculated
-            herein will yeild the second phase correction factor to be subtracted from phase_to_load. Units of this correction are in Hz.
+            herein will yield the second phase correction factor to be subtracted from phase_to_load. Units of this correction are in Hz.
         :type phase_correction_factor: ndarray{float}
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
