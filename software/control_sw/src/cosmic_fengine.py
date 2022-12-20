@@ -1231,7 +1231,8 @@ class CosmicFengine():
                                         clock_rate_hz=2048000000, invert_band = False)
 
     #FOR TESTING ONLY
-    def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, load_time=None, clock_rate_hz=2048000000, invert_band=False):
+    def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, sideband, fshifts,
+                             load_time=None, clock_rate_hz=2048000000, invert_band=False):
         """
         Set the delays for this F-Engine once. If no load_time is provided, delays are uploaded to the
         F-Engine immediately.
@@ -1253,6 +1254,10 @@ class CosmicFengine():
             the rate of change of phase, in radians per second. This is the incremental phase
             which should be added to the current phase each second.
         :type phase_rates: list{float}
+        :param sideband: 2-length ndarray of the sideband value applied to each tuning.
+        :type sideband: ndarray{int}
+        :param fshifts: 4-length ndarray of the lo frequency shifts in Hz applied to each stream in the `lo` block.
+        :type fshifts: ndarray{float}
         :param load_time: a unix time in seconds at which to load the delay values provided to the 
         F-Engine. 
         :type load_time: float
@@ -1269,12 +1274,15 @@ class CosmicFengine():
         else:
             load_time=int(load_time)
 
+        phase_correction_factor = np.concatenate(((2*np.pi) * sideband[0] * fshifts[0:2],             #tuning 0
+                                                    (2*np.pi) * sideband[1] * fshifts[2:4]),axis=0)   #tuning 1
         self.logger.debug("Setting delays at time %s" % (time.ctime(load_time)))
-        self.delay_to_load = np.array(delays)
-        self.delay_rate_to_load = np.array(delay_rates)
-        self.phase_to_load = np.array(phases)
-        self.phase_rate_to_load = np.array(phase_rates)
-        self.set_delays(delays, delay_rates, phases, phase_rates, clock_rate_hz, invert_band)
+        delay_to_load = np.array(delays,dtype=float)
+        delay_rate_to_load = np.array(delay_rates,dtype=float)
+        phase_to_load = np.array(phases,dtype=float)
+        phase_rate_to_load = np.array(phase_rates,dtype=float)
+        self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, 
+                        phase_correction_factor, clock_rate_hz, invert_band)
        
         #Handle the loading time/force loading of the delays
         if force_delay_load:
