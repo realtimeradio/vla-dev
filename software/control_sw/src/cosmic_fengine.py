@@ -1152,7 +1152,7 @@ class CosmicFengine():
                     eff_lo = np.array([message_data["effective_lo_0_mhz"], message_data["effective_lo_1_mhz"]], dtype = float)* 1e-3 # gigahertz
                     sideband = np.array([message_data["sideband_0"], message_data["sideband_1"]], dtype = int)
                     fshifts = np.array(message_data["lo_hz"])
-                    model_time = delay_coeffs["time_value"]
+                    model_time = message_data["time_value"]
 
                 if self.delay_channel_names[1] == message['channel']:
                     #Need to update delay calibration values
