@@ -95,6 +95,8 @@ class Sync(Block):
     def wait_for_sync(self):
         """
         Block until a sync has been received.
+
+        :return: False if timeout occurs, True otherwise.
         """
         tstart = time.time()
         ttimeout = tstart + self.sync_wait_timeout_limit_s
@@ -102,8 +104,9 @@ class Sync(Block):
         while(self.count_ext() == c):
             if time.time() > ttimeout:
                 self._warning("Timed out waiting for sync pulse")
-                break
+                return False
             time.sleep(self.sync_wait_sleep_period_s)
+        return True
 
     #def wait_for_pps(self, timeout=2.0):
     #    """
