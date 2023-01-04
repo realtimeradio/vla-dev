@@ -77,19 +77,12 @@ class Sync(Block):
     #    """
     #    return self.read_uint('int_sync_count')
 
-    def get_latency(self):
-        """
-        :return: Number of FPGA clock ticks between sync transmission and reception
-        :rtype int:
-        """
-        return self.read_uint('latency') & 0xff
-
     def get_error_count(self):
         """
         :return: Number of sync errors.
         :rtype int:
         """
-        return self.read_uint('latency') >> 8
+        return self.read_uint('ext_period_variations')
 
     def reset_error_count(self):
         """
