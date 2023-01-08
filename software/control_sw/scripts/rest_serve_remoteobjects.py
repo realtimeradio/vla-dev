@@ -82,6 +82,7 @@ if __name__ == '__main__':
                     'host': pcie_id_string,
                     'fpgfile': args.fpgfile,
                     'pipeline_id': pipeline_id,
+                    'neths': 2,
                     'redis_host': args.redis_host,
                     'redis_port': args.redis_port,
                 }
