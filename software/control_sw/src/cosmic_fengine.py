@@ -765,7 +765,10 @@ class CosmicFengine():
         self.logger.debug("Channels to send by FID: %s" % (str(channels_to_send_by_fid)))
         self.logger.debug("Largest number of chans with one destination: %d" % channels_to_send)
 
-        pkt_starts, pkt_payloads, word_indices, antchans = self.packetizers[0].get_packet_info(chans_per_packet, channels_to_send, ninput)
+        self.logger.debug("Channel block size: %d" % self.chanreorder.n_parallel_chans)
+        pkt_starts, pkt_payloads, word_indices, antchans = self.packetizers[0].get_packet_info(chans_per_packet, channels_to_send, ninput, chan_block_size=self.chanreorder.n_parallel_chans)
+        for i in range(len(pkt_starts)):
+            self.logger.debug("start %s, payload %s, word_indices %s, antchans %s" % (str(pkt_starts[i]), str(pkt_payloads[i]), str(word_indices[i]), str(antchans[i])))
         n_pkts = len(pkt_starts)
         antchan_indices = np.arange(n_pkts*chans_per_packet, dtype=int)[::chans_per_packet]
         chan_indices = antchan_indices % channels_to_send

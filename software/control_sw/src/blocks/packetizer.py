@@ -87,6 +87,7 @@ class Packetizer(Block):
         self.full_data_rate_gbps = 8*self.sample_width * self.n_ants * self.sample_rate_mhz*1e6 / 1.0e9
         self.granularity = granularity
         self.n_slots = self.n_total_words // granularity
+        self.n_chans_per_slot = self.n_slots // self.n_chans
 
     def _populate_headers(self, headers):
         """
@@ -264,6 +265,9 @@ class Packetizer(Block):
         # Divvy up the spare slots as evenly as we can
         spare_slots_per_pkt = spare_slots // req_packets
         self._info("%d spare slots per packet" % spare_slots_per_pkt)
+        # Make sure the number of spare slots equates to an allowed number of unused channels
+        spare_slots_per_pkt -= (spare_slots_per_pkt % (chan_block_size // self.n_chans_per_slot))
+        self._info("%d spare slots per packet after enforcing %d chan granularity" % (spare_slots_per_pkt, chan_block_size))
         # Need at least two words of spare space for EOF, and then a cycle of invalid data (irrational 100GbE core requirement)
         assert spare_slots_per_pkt > 0, "Need at least one spare slot per packet!"
         assert spare_slots_per_pkt*self.granularity >= 2, "Need at least two spare words per packet"
