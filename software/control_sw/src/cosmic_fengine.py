@@ -1164,13 +1164,13 @@ class CosmicFengine():
                 if self.delay_track.is_set():
                     loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"])
 
-                    # T = ax^2 + bx + c + delay_calibrations
-                    delay_to_load = (np.array([delay_coeffs["delay_raterate_nsps2"]*(loadtime_diff_modeltime**2) + 
+                    # T = 1/2*ax^2 + bx + c + delay_calibrations
+                    delay_to_load = (np.array([0.5*delay_coeffs["delay_raterate_nsps2"]*(loadtime_diff_modeltime**2) + 
                                         delay_coeffs["delay_rate_nsps"]*loadtime_diff_modeltime + 
                                         delay_coeffs["delay_ns"]]*self.delay.n_streams,dtype=float) +
                                         delay_calib)
-                    # dT/dt = 2ax + b
-                    delay_rate_to_load = np.array([delay_coeffs["delay_raterate_nsps2"]*2*loadtime_diff_modeltime + 
+                    # dT/dt = ax + b
+                    delay_rate_to_load = np.array([delay_coeffs["delay_raterate_nsps2"]*loadtime_diff_modeltime + 
                                             delay_coeffs["delay_rate_nsps"]]*self.delay.n_streams,dtype=float)
 
                     #phase (calculated per tuning)
