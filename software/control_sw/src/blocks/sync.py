@@ -163,6 +163,63 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
         time.sleep(0.2) # Ensure the sync has propagated
 
+    def check_timekeeping(self, sync_rate_hz=20):
+        """
+        Check timekeeping logic, returning True if the system looks OK,
+        and False otherwise.
+
+        :param sync_rate_hz: Expected sync rate, in Hz
+        :type sync_rate_hz: int
+
+        Tests:
+        1. Sync pulse period = 1./sync_period_hz
+        2. Sync arrived in last 1.5*sync_period_ms
+        3. Internal telescope time within 20ms of NTP
+
+        :return: True if OK, False otherwise
+        :rtype: bool
+        """
+        ### Sync period test
+        # Check expected sync period is integer clocks, otherwise
+        # the test will fail
+        assert self.clk_hz % sync_rate_hz == 0, 'Sync period not integer FPGA clocks!'
+        exp_period = self.clk_hz // sync_rate_hz
+        period_ok = True
+        period = self.period()
+        if period != exp_period:
+            period_ok = False
+            self._error("Period %d was unexpected" % period)
+        ### Sync arrival test
+        sync_ok = True
+        wait_time = 1.5/sync_rate_hz
+        c0 = self.count_ext()
+        time.sleep(wait_time)
+        c1 = self.count_ext()
+        if c0 == c1:
+            sync_ok = False
+            self._error("No sync detected in %.3f seconds" % wait_time)
+        ### TT test
+        offset_ok = True
+        # Don't bother with the test if there are no syncs, it'll only time out
+        offset_s = self.get_tt_ntp_offset()
+        if abs(offset_s) > 0.02:
+            offset_ok = False
+            self._error("TT/NTP offset was %.3f seconds" % offset_s)
+        return period_ok and sync_ok and offset_ok
+
+    def get_tt_ntp_offset(self):
+        """
+        Get the offset of the FPGA's telescope time from NTP, in seconds.
+
+        :return: Offset of tt from NTP in seconds
+        :rtype: float
+        """
+        t, _ = self.get_tt_of_ext_sync()
+        now_ntp = time.time()
+        now_tt = t / float(self.clk_hz)
+        return now_tt - now_ntp
+
+
     #def set_output_sync_rate(self, mask):
     #    """
     #    Set the output sync generation rate. A sync is issued
