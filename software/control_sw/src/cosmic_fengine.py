@@ -125,6 +125,10 @@ class CosmicFengine():
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
+        self.dts_mon_switch = threading.Event()
+        self.dts_mon_thread = threading.Thread(
+            target=self.monitor_dts, args=(), daemon=False
+        )
 
         self.blocks = {}
         try:
@@ -1023,6 +1027,69 @@ class CosmicFengine():
         except:
             self.logger.error("Delay monitor unable to post to redis hash FENG_delayStatus.")
         return
+
+    def stop_dts_monitor(self):
+        """
+        End the thread running `monitor_dts` if the thread is alive. Otherwise ignore.
+        """
+        if not self.dts_mon_thread.is_alive():
+            self.logger.error(f"DTS monitor thread is already stopped. Ignoring request.")
+            return
+        else:
+            self.dts_mon_switch.clear()
+            self.logger.info("Stopping DTS monitor thread...")
+            self.dts_mon_thread.join(1)
+            if self.dts_mon_thread.is_alive():
+                self.logger.error("DTS monitor thread not stopped in the 1 second allowed for joining, please retry...")
+
+    def start_dts_monitor(self):
+        """
+        Start the thread running `monitor_dts` if the thread is dead. Otherwise ignore.
+        """
+
+        if self.dts_mon_thread.is_alive():
+            self.logger.error(f"DTS monitor thread is running. Ignoring request.")
+            return
+        self.dts_mon_switch.set()
+
+        self.dts_mon_thread = threading.Thread(
+            target=self.monitor_dts, args=(), daemon=False
+        )
+        self.logger.info("Starting DTS monitor thread...")
+        self.dts_mon_thread.start()
+
+    def monitor_dts(self, poll_time_s=0.05):
+        """
+        Monitor the DTS timing state, and disable Ethernet output if
+        it looks broken.
+
+        :param poll_time_s: How often to poll the DTS state registers, in seconds
+        :type poll_time_s: float
+        """
+        disabled = False
+        rc = "FENG_dtsMonitor"
+        self.logger.info(f"DTS monitor starting. Alerting to {rc}")
+        while(True):
+            if self.redis_obj is not None:
+                # Record the fact the thread is alive with an expiring key
+                self.redis_obj.set(rc + "_alive", 1, ex=3)
+            if not self.dts_mon_switch.is_set():
+                self.logger.info("DTS monitor switch is cleared, breaking out of main loop.")
+                break
+            ok = self.sync.check_timekeeping()
+            if not ok and not disabled:
+                self.logger.error("Timekeeping error! Disabling Ethernet")
+                disabled = True
+                self.disable_tx()
+                if self.redis_obj is not None:
+                    self.redis_obj.publish(rc, f"Timekeeping error on {self.fpga.antname}. Disabling")
+            if ok and disabled:
+                fpga.logger.warning("Timekeeping recovery! Enabling Ethernet")
+                disabled = False
+                self.enable_tx()
+                if self.redis_obj is not None:
+                    self.redis_obj.publish(rc, f"Timekeeping recovery on {self.fpga.antname}. Enabling")
+            time.sleep(poll_time_s)
 
     def stop_delay_tracking(self):
         """
