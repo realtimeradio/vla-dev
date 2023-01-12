@@ -1335,28 +1335,6 @@ class CosmicFengine():
             self.logger.warn("Rearming as tt_of_sync %d %% %d != 0" % (self.sync.get_tt_of_sync(), (NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA)))
 
             rearm_limit -= 1
-            
-
-
-    def set_lo_delays(self, lo_delay_list, force=False):
-        '''
-        Sets the LO Delays.
-        
-        :param lo_delay_list: list of delay in samples to apply in order of streams.
-        :type lo_delay_list: List
-        
-        :param force: If True, call delay.force_load().
-        :type sw_sync: bool
-
-        :return:  Returns the lo_delay values from the board in samples
-        '''
-        for stream, delay in enumerate(lo_delay_list):
-            self.delay.set_delay(stream, delay, force=force)
-
-        return [
-            self.delay.get_delay(stream)
-            for stream, _ in enumerate(lo_delay_list)
-        ]
 
     def read_chan_dest_ips_as_json(self, portnum):
         '''
