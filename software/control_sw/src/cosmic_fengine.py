@@ -122,6 +122,7 @@ class CosmicFengine():
         self.delay_halfcal = threading.Event()
         self.delay_halfphase = threading.Event()
         self.delay_halfphasecorrection = threading.Event()
+        self.delay_fullphasecorrection = threading.Event()
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
@@ -930,6 +931,8 @@ class CosmicFengine():
         #if applying the fshift phase correction to the phase
         if self.delay_halfphasecorrection.is_set():
             phase_to_load[2:4] -= phase_correction_factor[2:4] * (delay_samples_int[2:4] / clock_rate_hz)
+        if self.delay_fullphasecorrection.is_set():
+            phase_to_load -= phase_correction_factor * (delay_samples_int / clock_rate_hz)
 
         # Massage rates into samples-per-spectra (lots of redundant use of clock rate...)
         delay_rates_samples_per_spec = delay_rate_to_load * 1e-9 * (2* self.autocorr.n_chans)
