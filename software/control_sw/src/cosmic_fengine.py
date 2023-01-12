@@ -1154,6 +1154,7 @@ class CosmicFengine():
                             delay_calib = np.fromiter(json.loads(self.redis_obj.hget
                             ("META_calibrationDelays", f"{self.fpga.get_connected_antname()}"
                             )).values(),dtype=float)
+                            self.logger.debug("Received trigger to load new calibration delays from 'META_calibrationDelays'.")
                         except BaseException:
                             self.logger.error("Unable to load calibration delays from 'META_calibrationDelays', Continuing...")
                             continue
