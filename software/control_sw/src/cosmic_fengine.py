@@ -1068,7 +1068,8 @@ class CosmicFengine():
         """
         disabled = False
         rc = "FENG_dtsMonitor"
-        self.logger.info(f"DTS monitor starting. Alerting to {rc}")
+        self.logger.info(f"DTS monitor for antenna {self.fpga.antname} starting. Alerting to {rc}")
+        test = False
         while(True):
             if self.redis_obj is not None:
                 # Record the fact the thread is alive with an expiring key
@@ -1077,14 +1078,14 @@ class CosmicFengine():
                 self.logger.info("DTS monitor switch is cleared, breaking out of main loop.")
                 break
             ok = self.sync.check_timekeeping()
-            if not ok and not disabled:
+            if test or (not ok and not disabled):
                 self.logger.error("Timekeeping error! Disabling Ethernet")
                 disabled = True
                 self.disable_tx()
                 if self.redis_obj is not None:
                     self.redis_obj.publish(rc, f"Timekeeping error on {self.fpga.antname}. Disabling")
-            if ok and disabled:
-                fpga.logger.warning("Timekeeping recovery! Enabling Ethernet")
+            if test or (ok and disabled):
+                self.logger.warning("Timekeeping recovery! Enabling Ethernet")
                 disabled = False
                 self.enable_tx()
                 if self.redis_obj is not None:
