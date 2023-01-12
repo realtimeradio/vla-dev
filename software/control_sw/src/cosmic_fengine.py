@@ -1316,43 +1316,6 @@ class CosmicFengine():
         '''
         return [eth.get_packet_rate() for eth in self.eths]
 
-    def set_lo_frequency_shift(self, lo_fshift_list, sw_sync=False):
-        '''
-        Sets the LO Frequency Shifts and resyncs, disabling tx for the duration of the function.
-        
-        :param lo_fshift_list: list of lo_fshifts in Hz to apply in order of streams.
-        :type lo_fshift_list: List
-        
-        :param sw_sync: If True, issue a software reset trigger, rather than waiting
-            for an external reset pulse to be received over SMA.
-        :type sw_sync: bool
-
-        :return:  Returns the lo_frequency_shift values from the board in Hz
-        '''
-        tx_enabled_mask = self.tx_enabled()
-        self.disable_tx()
-
-        for stream, offshift in enumerate(lo_fshift_list):
-            self.lo.set_lo_frequency_shift(stream, offshift)
-        self.lo.force_load()
-
-        # self.logger.info("Arming sync generators")
-        # self.sync.arm_sync()        
-        # if sw_sync:
-        #     self.logger.info("Issuing software sync")
-        #     self.sync.sw_sync()
-        # else:          
-        self._enforce_valid_tt_armed()
-
-        for i, eth in enumerate(self.eths):
-            if tx_enabled_mask[i]:
-                eth.enable_tx()
-
-        return [
-            self.lo.get_lo_frequency_shift(i, return_in_hz=True)
-            for i in range(len(lo_fshift_list))
-        ]
-
     def _enforce_valid_tt_armed(self, rearm_limit=5, rearm_noise=False):
         '''
         Awaits a sync pulse and validates the telescope-time, re-arming and repeating if it's invalid.
