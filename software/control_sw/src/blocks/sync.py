@@ -222,11 +222,14 @@ class Sync(Block):
         ### TT test
         offset_ok = True
         # Don't bother with the test if there are no syncs, it'll only time out
-        offset_s = self.get_tt_ntp_offset()
-        if abs(offset_s) > 0.02:
+        if not sync_ok:
             offset_ok = False
-            if verbose:
-                self._error("TT/NTP offset was %.3f seconds" % offset_s)
+        else:
+            offset_s = self.get_tt_ntp_offset()
+            if abs(offset_s) > 0.02:
+                offset_ok = False
+                if verbose:
+                    self._error("TT/NTP offset was %.3f seconds" % offset_s)
         return period_ok and sync_ok and offset_ok
 
     def get_tt_ntp_offset(self):
