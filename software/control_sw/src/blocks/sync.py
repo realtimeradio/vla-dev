@@ -77,19 +77,12 @@ class Sync(Block):
     #    """
     #    return self.read_uint('int_sync_count')
 
-    def get_latency(self):
-        """
-        :return: Number of FPGA clock ticks between sync transmission and reception
-        :rtype int:
-        """
-        return self.read_uint('latency') & 0xff
-
     def get_error_count(self):
         """
         :return: Number of sync errors.
         :rtype int:
         """
-        return self.read_uint('latency') >> 8
+        return self.read_uint('ext_period_variations')
 
     def reset_error_count(self):
         """
@@ -102,6 +95,8 @@ class Sync(Block):
     def wait_for_sync(self):
         """
         Block until a sync has been received.
+
+        :return: False if timeout occurs, True otherwise.
         """
         tstart = time.time()
         ttimeout = tstart + self.sync_wait_timeout_limit_s
@@ -109,8 +104,9 @@ class Sync(Block):
         while(self.count_ext() == c):
             if time.time() > ttimeout:
                 self._warning("Timed out waiting for sync pulse")
-                break
+                return False
             time.sleep(self.sync_wait_sleep_period_s)
+        return True
 
     #def wait_for_pps(self, timeout=2.0):
     #    """
