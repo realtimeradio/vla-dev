@@ -30,6 +30,8 @@ class Sync(Block):
     OFFSET_MAN_SYNC = 8
     OFFSET_ARM_NOISE = 9
     OFFSET_TT_LOAD_ARM = 10
+    OFFSET_LOOPBACK_EN = 11
+    OFFSET_ERR_DETECT_ENABLE = 12
 
     def __init__(self, host, name, clk_hz=None, logger=None):
         super(Sync, self).__init__(host, name, logger)
@@ -162,6 +164,20 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
         time.sleep(0.2) # Ensure the sync has propagated
+
+    def enable_error_detect(self):
+        """
+        Enable error output, which goes high whenever missing syncs or
+        syncs with inconsistent period are detected.
+        """
+        self.change_reg_bits('ctrl', 1, self.OFFSET_ERR_DETECT_ENABLE)
+
+    def disable_error_detect(self):
+        """
+        Disable error output, which goes high whenever missing syncs or
+        syncs with inconsistent period are detected.
+        """
+        self.change_reg_bits('ctrl', 0, self.OFFSET_ERR_DETECT_ENABLE)
 
     def check_timekeeping(self, sync_rate_hz=20):
         """
