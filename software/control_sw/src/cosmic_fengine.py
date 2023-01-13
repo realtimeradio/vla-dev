@@ -1089,7 +1089,7 @@ class CosmicFengine():
                 if self.redis_obj is not None:
                     self.redis_obj.publish(rc, message)
                 break
-            ok = self.sync.check_timekeeping()
+            ok = self.sync.check_timekeeping(verbose=not disabled) #log errors only if they are new
             if test or (not ok and not disabled):
                 self.logger.error("Timekeeping error! Disabling Ethernet")
                 disabled = True
