@@ -692,9 +692,12 @@ class CosmicFengine():
         :type lo_fshift_list: List
         """
         if program:
+            self.stop_dts_monitor()
+            self.stop_delay_tracking()
             self.program(fpgfile)
         
         if program or initialize:
+            self.stop_dts_monitor()
             if dts_lane_map is not None:
                 self.dts.lane_map = dts_lane_map
             self.initialize(read_only=False, allow_unlocked_dts=test_vectors)
@@ -1071,14 +1074,20 @@ class CosmicFengine():
         """
         disabled = False
         rc = "FENG_dtsMonitor"
-        self.logger.info(f"DTS monitor for antenna {self.fpga.antname} starting. Alerting to {rc}")
+        message = f"DTS monitor for antenna {self.fpga.antname} starting. Alerting to {rc}"
+        self.logger.info(message)
+        if self.redis_obj is not None:
+            self.redis_obj.publish(rc, message)
         test = False
         while(True):
             if self.redis_obj is not None:
                 # Record the fact the thread is alive with an expiring key
                 self.redis_obj.set(rc + "_alive", 1, ex=3)
             if not self.dts_mon_switch.is_set():
-                self.logger.info("DTS monitor switch is cleared, breaking out of main loop.")
+                message = "DTS monitor switch is cleared, breaking out of main loop."
+                self.logger.info(message)
+                if self.redis_obj is not None:
+                    self.redis_obj.publish(rc, message)
                 break
             ok = self.sync.check_timekeeping()
             if test or (not ok and not disabled):
