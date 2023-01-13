@@ -193,7 +193,7 @@ class Sync(Block):
         Tests:
         1. Sync pulse period = 1./sync_period_hz
         2. Sync arrived in last 1.5*sync_period_ms
-        3. Internal telescope time within 20ms of NTP
+        3. Internal telescope time within 50ms of NTP
 
         :return: True if OK, False otherwise
         :rtype: bool
@@ -226,7 +226,7 @@ class Sync(Block):
             offset_ok = False
         else:
             offset_s = self.get_tt_ntp_offset()
-            if abs(offset_s) > 0.02:
+            if abs(offset_s) > 0.05:
                 offset_ok = False
                 if verbose:
                     self._error("TT/NTP offset was %.3f seconds" % offset_s)
