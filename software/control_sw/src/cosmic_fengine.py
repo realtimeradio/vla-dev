@@ -126,6 +126,10 @@ class CosmicFengine():
         self.delay_tracking_thread = threading.Thread(
             target=self.delay_tracking, args=(), daemon=False
         )
+        self.dts_mon_switch = threading.Event()
+        self.dts_mon_thread = threading.Thread(
+            target=self.monitor_dts, args=(), daemon=False
+        )
 
         self.blocks = {}
         try:
@@ -1027,6 +1031,70 @@ class CosmicFengine():
             self.logger.error("Delay monitor unable to post to redis hash FENG_delayStatus.")
         return
 
+    def stop_dts_monitor(self):
+        """
+        End the thread running `monitor_dts` if the thread is alive. Otherwise ignore.
+        """
+        if not self.dts_mon_thread.is_alive():
+            self.logger.error(f"DTS monitor thread is already stopped. Ignoring request.")
+            return
+        else:
+            self.dts_mon_switch.clear()
+            self.logger.info("Stopping DTS monitor thread...")
+            self.dts_mon_thread.join(1)
+            if self.dts_mon_thread.is_alive():
+                self.logger.error("DTS monitor thread not stopped in the 1 second allowed for joining, please retry...")
+
+    def start_dts_monitor(self):
+        """
+        Start the thread running `monitor_dts` if the thread is dead. Otherwise ignore.
+        """
+
+        if self.dts_mon_thread.is_alive():
+            self.logger.error(f"DTS monitor thread is running. Ignoring request.")
+            return
+        self.dts_mon_switch.set()
+
+        self.dts_mon_thread = threading.Thread(
+            target=self.monitor_dts, args=(), daemon=False
+        )
+        self.logger.info("Starting DTS monitor thread...")
+        self.dts_mon_thread.start()
+
+    def monitor_dts(self, poll_time_s=0.05):
+        """
+        Monitor the DTS timing state, and disable Ethernet output if
+        it looks broken.
+
+        :param poll_time_s: How often to poll the DTS state registers, in seconds
+        :type poll_time_s: float
+        """
+        disabled = False
+        rc = "FENG_dtsMonitor"
+        self.logger.info(f"DTS monitor for antenna {self.fpga.antname} starting. Alerting to {rc}")
+        test = False
+        while(True):
+            if self.redis_obj is not None:
+                # Record the fact the thread is alive with an expiring key
+                self.redis_obj.set(rc + "_alive", 1, ex=3)
+            if not self.dts_mon_switch.is_set():
+                self.logger.info("DTS monitor switch is cleared, breaking out of main loop.")
+                break
+            ok = self.sync.check_timekeeping()
+            if test or (not ok and not disabled):
+                self.logger.error("Timekeeping error! Disabling Ethernet")
+                disabled = True
+                self.disable_tx()
+                if self.redis_obj is not None:
+                    self.redis_obj.publish(rc, f"Timekeeping error on {self.fpga.antname}. Disabling")
+            if test or (ok and disabled):
+                self.logger.warning("Timekeeping recovery! Enabling Ethernet")
+                disabled = False
+                self.enable_tx()
+                if self.redis_obj is not None:
+                    self.redis_obj.publish(rc, f"Timekeeping recovery on {self.fpga.antname}. Enabling")
+            time.sleep(poll_time_s)
+
     def stop_delay_tracking(self):
         """
         End the thread running `delay_tracking` if the thread is alive. Otherwise ignore.
@@ -1320,43 +1388,6 @@ class CosmicFengine():
         '''
         return [eth.get_packet_rate() for eth in self.eths]
 
-    def set_lo_frequency_shift(self, lo_fshift_list, sw_sync=False):
-        '''
-        Sets the LO Frequency Shifts and resyncs, disabling tx for the duration of the function.
-        
-        :param lo_fshift_list: list of lo_fshifts in Hz to apply in order of streams.
-        :type lo_fshift_list: List
-        
-        :param sw_sync: If True, issue a software reset trigger, rather than waiting
-            for an external reset pulse to be received over SMA.
-        :type sw_sync: bool
-
-        :return:  Returns the lo_frequency_shift values from the board in Hz
-        '''
-        tx_enabled_mask = self.tx_enabled()
-        self.disable_tx()
-
-        for stream, offshift in enumerate(lo_fshift_list):
-            self.lo.set_lo_frequency_shift(stream, offshift)
-        self.lo.force_load()
-
-        # self.logger.info("Arming sync generators")
-        # self.sync.arm_sync()        
-        # if sw_sync:
-        #     self.logger.info("Issuing software sync")
-        #     self.sync.sw_sync()
-        # else:          
-        self._enforce_valid_tt_armed()
-
-        for i, eth in enumerate(self.eths):
-            if tx_enabled_mask[i]:
-                eth.enable_tx()
-
-        return [
-            self.lo.get_lo_frequency_shift(i, return_in_hz=True)
-            for i in range(len(lo_fshift_list))
-        ]
-
     def _enforce_valid_tt_armed(self, rearm_limit=5, rearm_noise=False):
         '''
         Awaits a sync pulse and validates the telescope-time, re-arming and repeating if it's invalid.
@@ -1376,28 +1407,6 @@ class CosmicFengine():
             self.logger.warn("Rearming as tt_of_sync %d %% %d != 0" % (self.sync.get_tt_of_sync(), (NTIME_PACKET*FPGA_CLOCKS_PER_SPECTRA)))
 
             rearm_limit -= 1
-            
-
-
-    def set_lo_delays(self, lo_delay_list, force=False):
-        '''
-        Sets the LO Delays.
-        
-        :param lo_delay_list: list of delay in samples to apply in order of streams.
-        :type lo_delay_list: List
-        
-        :param force: If True, call delay.force_load().
-        :type sw_sync: bool
-
-        :return:  Returns the lo_delay values from the board in samples
-        '''
-        for stream, delay in enumerate(lo_delay_list):
-            self.delay.set_delay(stream, delay, force=force)
-
-        return [
-            self.delay.get_delay(stream)
-            for stream, _ in enumerate(lo_delay_list)
-        ]
 
     def read_chan_dest_ips_as_json(self, portnum):
         '''
