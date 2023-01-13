@@ -327,8 +327,9 @@ class CosmicFengine():
         :type allow_unlocked_dts: bool
         """
         if not read_only:
-            #kill delay_tracking thread
+            #kill delay_tracking and DTS thread
             self.stop_delay_tracking()
+            self.stop_dts_monitor()
 
         for blockname, b in self.blocks.items():
             if (blockname == 'dts' and allow_unlocked_dts):
@@ -474,6 +475,8 @@ class CosmicFengine():
         """
         if self.delay_tracking_thread.is_alive():
             self.stop_delay_tracking()
+        if self.dts_mon_thread.is_alive():
+            self.stop_dts_monitor()
         if fpgfile is None:
             fpgfile = self.fpgfile
 
@@ -692,12 +695,9 @@ class CosmicFengine():
         :type lo_fshift_list: List
         """
         if program:
-            self.stop_dts_monitor()
-            self.stop_delay_tracking()
             self.program(fpgfile)
         
         if program or initialize:
-            self.stop_dts_monitor()
             if dts_lane_map is not None:
                 self.dts.lane_map = dts_lane_map
             self.initialize(read_only=False, allow_unlocked_dts=test_vectors)
