@@ -320,6 +320,8 @@ class PhaseRotate(Block):
         """
 
         phases = np.array(phases)
+        #wrap phases to within [-pi, +pi]
+        phases = (phases + np.pi) % (2 * np.pi) - np.pi
         assert len(phases) == self.n_chans, 'Phase calibration list must be %d elements long' % self.n_chans
         phases /= np.pi # Phases are in units of pi
         phases *= 2**self._CAL_PHASE_BP
