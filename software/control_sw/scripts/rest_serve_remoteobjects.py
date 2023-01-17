@@ -100,4 +100,12 @@ if __name__ == '__main__':
                 feng._initialize_blocks()
                 print(f'\tInitialized `{object_id}`...')
 
-    serve(app, host='0.0.0.0', port=6000, threads=8)
+    serve( # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html
+        app,
+        host='0.0.0.0',
+        port=6000,
+        threads=12,
+        connection_limit=256, # Default: 100
+        cleanup_interval=5, # Default: 30
+        channel_timeout=10, # Default: 120
+    )
