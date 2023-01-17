@@ -714,19 +714,7 @@ class CosmicFengine():
         
         #first, load lo_offshifts, assuming those received are in hz:
         if lo_fshift_list is not None:
-            
-            self.lo.set_reload_repeat_period(int(2048e6))
-
-            for stream, offshift in enumerate(lo_fshift_list):
-                self.lo.set_lo_frequency_shift(stream, offshift)
-
-            lo_load_time = np.ceil(time.time()) + 1 #one second into the future
-            if lo_load_time > time.time():
-                self.lo.set_target_load_time(int(lo_load_time * FPGA_CLOCK_RATE_HZ), enable_trig=True)
-                self.logger.info(f"F-Shift load time set to {time.ctime(lo_load_time)}")
-                time.sleep(lo_load_time - (time.time()))
-            else:
-                raise RuntimeError("Cannot set F-shift load time for time in the past.")
+            self.set_lo_fshift_list(lo_fshift_list)
             
         if sync:
             self.logger.info("Arming sync generators")
@@ -882,6 +870,25 @@ class CosmicFengine():
         self.delay_channel_names = [
             f"{self.fpga.get_connected_antname()}_delays",
             "update_calibration_delays"]
+
+    def set_lo_fshift_list(self, lo_fshift_list):
+        """
+        Apply and load the provided list of LO FShift values, blocking until after the load.
+        :param lo_fshift_list: The list of LO FShifts in Hz to apply, in order of streams.
+        :type lo_fshift_list: List
+        """
+        self.lo.set_reload_repeat_period(int(2048e6))
+
+        for stream, offshift in enumerate(lo_fshift_list):
+            self.lo.set_lo_frequency_shift(stream, offshift)
+
+        lo_load_time = np.ceil(time.time()) + 1 #one second into the future
+        if lo_load_time > time.time():
+            self.lo.set_target_load_time(int(lo_load_time * FPGA_CLOCK_RATE_HZ), enable_trig=True)
+            self.logger.info(f"F-Shift load time set to {time.ctime(lo_load_time)}")
+            time.sleep(lo_load_time - (time.time()))
+        else:
+            raise RuntimeError("Cannot set F-shift load time for time in the past.")
 
     def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
                     phase_correction_factor, clock_rate_hz=2048000000, invert_band=False):
