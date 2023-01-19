@@ -1189,6 +1189,31 @@ class CosmicFengine():
         self.logger.info("Starting delay tracking thread...")
         self.delay_tracking_thread.start()
 
+    def check_delay_time(self, tolerance=1e-1):
+        """
+        A handy function to be called often in the runing of the delay_tracking thread.
+        Checks the time registered by the delay block against the NTP time of the server
+        and asserts that the difference is within the tolerance specified in the
+        argument.
+
+        Args:
+            tolerance: float
+        
+        Returns:
+            boolean: True - time is within tolerance.
+                     False- time is not within tolerance.
+        """
+        self.logger.info("Checking FPGA time...")
+        if not np.isclose(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ,time.time(),atol=tolerance):
+            self.logger.error(f"""
+            Checking FPGA time...
+            FPGA is reporting telescope time: 
+            {time.ctime(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ)} = {self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ}s 
+            which is not close to current NTP time:
+            {time.ctime(time.time())} = {time.time()}s.""")
+            return False
+        return True
+
     def delay_tracking(self):
         """
         Started in a thread, this function calls on `set_delays` to update the F-Engine coefficients for 
@@ -1214,13 +1239,7 @@ class CosmicFengine():
         zeros = np.zeros(self.phaserotate.n_streams)
 
         #check that telescope time is correct:
-        if not np.isclose(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ,time.time(),atol=1e-1):
-            self.logger.error(f"""
-            FPGA is reporting telescope time: 
-            {time.ctime(self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ)} = {self.delay.timer.get_fpga_time()/FPGA_CLOCK_RATE_HZ}s 
-            which is not close to current NTP time:
-            {time.ctime(time.time())} = {time.time()}s. Aborting thread...""")
-            return
+        if not self.check_delay_time(tolerance= 1e-1): return
 
         #Open the outer while loop for the redis channel listener:
         while True:
@@ -1255,7 +1274,7 @@ class CosmicFengine():
 
             else:
                 #No values received, load values on hand
-                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 1e-2)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
+                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 1e-1)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
                 t_future_seconds = t_future_fpga_clks / FPGA_CLOCK_RATE_HZ
                 
                 # with self._delay_lock:
@@ -1314,13 +1333,19 @@ class CosmicFengine():
                     self.delay.set_target_load_time(t_future_fpga_clks)
                     self.phaserotate.set_target_load_time(t_future_fpga_clks)
                 else:
-                    self.logger.warn(f"""Delays calculated for time {t_future_seconds} is in the past. Continuing...""")
+                    self.logger.warn(f"""Delays calculated for time {t_future_seconds} is in the past.""")
+                    if not self.check_delay_time(tolerance= 1e-1): 
+                        self.logger.error(f"Aborting thread.")
+                        return
                     continue
                 try:
                     # sleep till time to load == 0 (to allow for loading)
                     time.sleep(self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ)  
                 except ValueError:
-                    self.logger.warn(f"""Tried to sleep for negative time. Continuing...""")
+                    self.logger.warn(f"""Tried to sleep for negative time.""")
+                    if not self.check_delay_time(tolerance= 1e-1): 
+                        self.logger.error(f"Aborting thread.")
+                        return
                     continue
                 self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
                                         clock_rate_hz=2048000000, invert_band = False)
