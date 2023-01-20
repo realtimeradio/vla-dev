@@ -1119,7 +1119,8 @@ class CosmicFengine():
         disabled = False
         last_bad = False # was the last check bad? Two consecutive bads => disable
         rc = "FENG_dtsMonitor"
-        message = f"DTS monitor for antenna {self.fpga.antname} starting. Alerting to {rc}"
+        antname = self.fpga.get_connected_antname()
+        message = f"DTS monitor @ {antname}: Starting. Alerting to {rc}."
         self.logger.info(message)
         if self.redis_obj is not None:
             self.redis_obj.publish(rc, message)
@@ -1133,27 +1134,27 @@ class CosmicFengine():
             if test or (not ok and not disabled):
                 self.logger.error("Timekeeping error!")
                 if self.redis_obj is not None:
-                    self.redis_obj.publish(rc, f"Timekeeping error on {self.fpga.antname}. Not yet disabling")
+                    self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping error. Not yet disabling.")
                 if last_bad:
                     self.logger.error("Disabling Ethernet")
                     disabled = True
                     self.disable_tx()
                     if self.redis_obj is not None:
-                        self.redis_obj.publish(rc, f"Timekeeping error on {self.fpga.antname}. Disabling")
+                        self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping error. Disabling.")
             if test or (ok and disabled):
                 self.logger.warning("Timekeeping recovery!")
                 if self.redis_obj is not None:
-                    self.redis_obj.publish(rc, f"Timekeeping recovery on {self.fpga.antname}. Not yet enabling")
+                    self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping recovery. Not yet enabling.")
                 if not last_bad:
                     self.logger.warning("Enabling Ethernet")
                     disabled = False
                     self.enable_tx()
                     if self.redis_obj is not None:
-                        self.redis_obj.publish(rc, f"Timekeeping recovery on {self.fpga.antname}. Enabling")
+                        self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping recovery. Enabling.")
             last_bad = not ok
             time.sleep(poll_time_s)
         
-        message = "DTS monitor switch is cleared, returning."
+        message = f"DTS monitor @ {antname}: Returning."
         self.logger.info(message)
         if self.redis_obj is not None:
             self.redis_obj.publish(rc, message)
