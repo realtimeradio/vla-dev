@@ -110,26 +110,25 @@ class CosmicFengine():
             else:
                 self._cfpga.upload_to_ram_and_program(fpgfile)
             
-        if redis_host is None:
-            self.redis_obj = None
-        else:
+        self.redis_obj = None
+        self.redis_pubsub = None
+
+        if redis_host is not None:
             self.redis_obj = redis.Redis(host = redis_host, port = redis_port, decode_responses=True)
+            self.redis_pubsub = self.redis_obj.pubsub(ignore_subscribe_messages=True)
 
         #Thread init stuff
-        self.delay_switch = threading.Event()
+        self.delay_tracking_switch = threading.Event()
         self.delay_track = threading.Event()
         self.delay_halfoff = threading.Event()
         self.delay_halfcal = threading.Event()
         self.delay_halfphase = threading.Event()
         self.delay_halfphasecorrection = threading.Event()
         self.delay_fullphasecorrection = threading.Event()
-        self.delay_tracking_thread = threading.Thread(
-            target=self.delay_tracking, args=(), daemon=False
-        )
+        self.delay_tracking_thread = None
+
         self.dts_mon_switch = threading.Event()
-        self.dts_mon_thread = threading.Thread(
-            target=self.monitor_dts, args=(), daemon=False
-        )
+        self.dts_mon_thread = None
 
         self.blocks = {}
         try:
@@ -473,10 +472,8 @@ class CosmicFengine():
         :type fpgfile: str
 
         """
-        if self.delay_tracking_thread.is_alive():
-            self.stop_delay_tracking()
-        if self.dts_mon_thread.is_alive():
-            self.stop_dts_monitor()
+        self.stop_delay_tracking()
+        self.stop_dts_monitor()
         if fpgfile is None:
             fpgfile = self.fpgfile
 
@@ -1041,28 +1038,45 @@ class CosmicFengine():
             self.logger.error("Delay monitor unable to post to redis hash FENG_delayStatus.")
         return
 
-    def stop_dts_monitor(self):
+    def stop_dts_monitor(self, timeout_s=5):
         """
         End the thread running `monitor_dts` if the thread is alive. Otherwise ignore.
         """
-        if not self.dts_mon_thread.is_alive():
-            self.logger.error(f"DTS monitor thread is already stopped. Ignoring request.")
+        if self.dts_mon_thread is None:
+            self.logger.warning(f"DTS monitor thread has never been instantiated. Ignoring request.")
             return
-        else:
-            self.dts_mon_switch.clear()
-            self.logger.info("Stopping DTS monitor thread...")
-            self.dts_mon_thread.join(1)
+
+        if not self.dts_mon_thread.is_alive():
+            if not self.dts_mon_switch.is_set():
+                self.logger.warning(f"DTS monitor thread is stopped already. Ignoring request.")
+                return
+            else:
+                self.logger.warning(f"DTS monitor thread is stopped already, albeit unexpectedly. Cleaning up.")
+
+        self.dts_mon_switch.clear()
+        if self.dts_mon_thread.is_alive():
+            self.logger.info(f"Stopping DTS monitor thread with a timeout of {timeout_s} second(s)...")
+            self.dts_mon_thread.join(timeout_s)
+
             if self.dts_mon_thread.is_alive():
-                self.logger.error("DTS monitor thread not stopped in the 1 second allowed for joining, please retry...")
+                message = f"DTS monitor thread did not join in {timeout_s} second(s)."
+                self.logger.error(message)
+                raise RuntimeError(message)
 
     def start_dts_monitor(self):
         """
         Start the thread running `monitor_dts` if the thread is dead. Otherwise ignore.
         """
 
-        if self.dts_mon_thread.is_alive():
-            self.logger.error(f"DTS monitor thread is running. Ignoring request.")
-            return
+        if self.dts_mon_thread is not None and self.dts_mon_thread.is_alive():
+            if self.dts_mon_switch.is_set():
+                self.logger.error(f"DTS monitor thread is already running. Ignoring request.")
+                return
+
+            message = f"DTS monitor thread is already running even though the switch is cleared."
+            self.logger.error(message)
+            raise RuntimeError(message)
+
         self.dts_mon_switch.set()
 
         self.dts_mon_thread = threading.Thread(
@@ -1070,6 +1084,29 @@ class CosmicFengine():
         )
         self.logger.info("Starting DTS monitor thread...")
         self.dts_mon_thread.start()
+
+    def get_status_dts_monitor(self):
+        """
+        Get a dictionary describing the state of the DTS monitor thread.
+
+        Returns:
+            dict: {
+                'is_alive': bool|None (the thread is alive or None if the thread has never been instantiated),
+                'switch_set': bool (the thread's switch is set),
+                'ok': bool (is_alive == switch_set)
+            }
+        """
+        status = {
+            "switch_set": self.dts_mon_switch.is_set(),
+        }
+        if self.dts_mon_thread is None:
+            status["is_alive"] = None
+            status["ok"] = not status["switch_set"]
+        else:
+            status["is_alive"] = self.dts_mon_thread.is_alive()
+            status["ok"] = status["is_alive"] == status["switch_set"]
+
+        return status
 
     def monitor_dts(self, poll_time_s=0.05):
         """
@@ -1087,16 +1124,11 @@ class CosmicFengine():
         if self.redis_obj is not None:
             self.redis_obj.publish(rc, message)
         test = False
-        while(True):
+        while self.dts_mon_switch.is_set():
             if self.redis_obj is not None:
                 # Record the fact the thread is alive with an expiring key
                 self.redis_obj.set(rc + "_alive", 1, ex=3)
-            if not self.dts_mon_switch.is_set():
-                message = "DTS monitor switch is cleared, breaking out of main loop."
-                self.logger.info(message)
-                if self.redis_obj is not None:
-                    self.redis_obj.publish(rc, message)
-                break
+
             ok = self.sync.check_timekeeping(verbose=not disabled) #log errors only if they are new
             if test or (not ok and not disabled):
                 self.logger.error("Timekeeping error!")
@@ -1120,35 +1152,51 @@ class CosmicFengine():
                         self.redis_obj.publish(rc, f"Timekeeping recovery on {self.fpga.antname}. Enabling")
             last_bad = not ok
             time.sleep(poll_time_s)
+        
+        message = "DTS monitor switch is cleared, returning."
+        self.logger.info(message)
+        if self.redis_obj is not None:
+            self.redis_obj.publish(rc, message)
 
-    def stop_delay_tracking(self):
+    def stop_delay_tracking(self, timeout_s=5):
         """
         End the thread running `delay_tracking` if the thread is alive. Otherwise ignore.
         In addition to just ending the thread, this function unsubscribes from the 
         redis channels that are listened to for delays when the thread
         is running. Furthermore, the `delay` and `phaserotate` blocks are re-initialised.
         """
-        if not self.delay_tracking_thread.is_alive():
-            self.logger.error(f"Delay tracking thread is stopped. Ignoring request.")
+        if self.delay_tracking_thread is None:
+            self.logger.warning(f"Delay tracking thread has never been instantiated. Ignoring request.")
             return
-        else:
-            self.delay_switch.clear()
+
+        if not self.delay_tracking_thread.is_alive():
+            if not self.delay_tracking_switch.is_set():
+                self.logger.warning(f"Delay tracking thread is stopped already. Ignoring request.")
+                return
+            else:
+                self.logger.warning(f"Delay tracking thread is stopped already, albeit unexpectedly. Cleaning up.")
+
+        self.delay_tracking_switch.clear()
+        if self.delay_tracking_thread.is_alive():
             self.logger.info("Stopping delay tracking thread...")
-            self.delay_tracking_thread.join(1)
+            self.delay_tracking_thread.join(timeout_s)
+
             if self.delay_tracking_thread.is_alive():
-                self.logger.error("Delay tracking thread not stopped in the 2 seconds allowed for joining, please retry...")
+                message = f"Delay tracking thread did not join in {timeout_s} second(s)."
+                self.logger.error(message)
+                raise RuntimeError(message)
 
         #Unsubscribe to the required redis channels
         if self.redis_obj is not None:
             for channel in self.delay_channel_names:
                 try:
-                    self.pubsub.unsubscribe(channel) 
+                    self.redis_pubsub.unsubscribe(channel) 
                 except redis.RedisError:
                     self.logger.warn(f'Unsubscription from `{channel}` unsuccessful.')    
         else:
             self.logger.warn("""Cosmic Fengine has no redis object instance. No subscribed channels
             to unsubscribe from.""")
-            return
+
         self.delay.initialize()
         self.phaserotate.initialize()
 
@@ -1165,17 +1213,22 @@ class CosmicFengine():
         channels on which the geometric delays are broadcast and on which the thread is notified
         of calibration delay updates in META_calibrationDelays hash.
         """
-        if self.delay_tracking_thread.is_alive():
-            self.logger.error(f"Delay tracking thread is running. Ignoring request.")
-            return
-        self.delay_switch.set()
+        if self.delay_tracking_thread is not None and self.delay_tracking_thread.is_alive():
+            if self.delay_tracking_switch.is_set():
+                self.logger.error(f"Delay tracking thread is already running. Ignoring request.")
+                return
+
+            message = f"Delay tracking thread is already running even though the switch is cleared."
+            self.logger.error(message)
+            raise RuntimeError(message)
+
+        self.delay_tracking_switch.set()
 
         #Subscribe to the required redis channels
         if self.redis_obj is not None:
-            self.pubsub = self.redis_obj.pubsub(ignore_subscribe_messages=True)
             for channel in self.delay_channel_names:
                 try:
-                    self.pubsub.subscribe(channel) 
+                    self.redis_pubsub.subscribe(channel) 
                 except redis.RedisError:
                     self.logger.error(f'Subscription to `{channel}` unsuccessful.')
         else:
@@ -1188,6 +1241,29 @@ class CosmicFengine():
         )
         self.logger.info("Starting delay tracking thread...")
         self.delay_tracking_thread.start()
+
+    def get_status_delay_tracking(self):
+        """
+        Get a dictionary describing the state of the delay tracking thread.
+
+        Returns:
+            dict: {
+                'is_alive': bool|None (the thread is alive or None if the thread has never been instantiated),
+                'switch_set': bool (the thread's switch is set),
+                'ok': bool (is_alive == switch_set)
+            }
+        """
+        status = {
+            "switch_set": self.delay_tracking_switch.is_set(),
+        }
+        if self.delay_tracking_thread is None:
+            status["is_alive"] = None
+            status["ok"] = not status["switch_set"]
+        else:
+            status["is_alive"] = self.delay_tracking_thread.is_alive()
+            status["ok"] = status["is_alive"] == status["switch_set"]
+
+        return status
 
     def check_delay_time(self, tolerance=1e-1):
         """
@@ -1239,16 +1315,14 @@ class CosmicFengine():
         zeros = np.zeros(self.phaserotate.n_streams)
 
         #check that telescope time is correct:
-        if not self.check_delay_time(tolerance= 1e-1): return
+        if not self.check_delay_time(tolerance= 1e-1):
+            self.logger.error("""Delay time does not checkout, aborting thread.""")
+            return
 
         #Open the outer while loop for the redis channel listener:
-        while True:
-            if not self.delay_switch.is_set():
-                self.logger.info("Delay switch is cleared, breaking out of main loop.")
-                break
-
+        while self.delay_tracking_switch.is_set():
             #Fetch message from subscribed channels
-            message = self.pubsub.get_message(timeout=0.0001)
+            message = self.redis_pubsub.get_message(timeout=0.0001)
 
             if message and "message" == message["type"]:
                 try:
@@ -1349,6 +1423,9 @@ class CosmicFengine():
                     continue
                 self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
                                         clock_rate_hz=2048000000, invert_band = False)
+    
+        self.logger.info("Delay switch is cleared, returning.")
+
 
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, sideband, fshifts,
