@@ -153,7 +153,7 @@ class Eth(Block):
         """
         Ethernet transmission enabled.
         """
-        return self.get_reg_bits('ctrl', 1)
+        return self.get_reg_bits('ctrl', 1) == 1
 
     def initialize(self, read_only=False):
         """
