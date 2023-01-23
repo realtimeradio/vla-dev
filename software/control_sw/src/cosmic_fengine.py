@@ -1122,10 +1122,10 @@ class CosmicFengine():
         :param poll_time_s: How often to poll the DTS state registers, in seconds
         :type poll_time_s: float
         """
-        disabled = False
+        disabled = self.dts_mon_tx_disable.is_set()
 
         consecutive_bad_limit = 2 # Two consecutive bads => disable
-        consecutive_bad_count = 0
+        consecutive_bad_count = 0 if not disabled else consecutive_bad_limit
 
         rc = "FENG_dtsMonitor"
         antname = self.fpga.get_connected_antname()
