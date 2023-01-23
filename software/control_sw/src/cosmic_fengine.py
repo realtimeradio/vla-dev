@@ -2,6 +2,7 @@ import logging
 import numpy as np
 import time
 import os
+import traceback
 import redis
 import json
 import casperfpga
@@ -85,6 +86,7 @@ class CosmicFengine():
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
         self.neths = neths
+        self.eth_tx = [None for i in range(neths)]
         #: Python Logger instance
         self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(__name__ + ":%s" % (host)))
         #: Underlying CasperFpga control instance
@@ -128,6 +130,7 @@ class CosmicFengine():
         self.delay_tracking_thread = None
 
         self.dts_mon_switch = threading.Event()
+        self.dts_mon_tx_disable = threading.Event()
         self.dts_mon_thread = None
 
         self.blocks = {}
@@ -239,6 +242,7 @@ class CosmicFengine():
         self.eths = []
         for i in range(self.neths):
             self.eths += [eth.Eth(self._cfpga, 'pipeline%d_eth%d' % (self.pipeline_id, i))]
+            self.eth_tx[i] = False
         for ethn, ethblock in enumerate(self.eths):
             setattr(self, 'eth%d' % ethn, ethblock)
 
@@ -329,6 +333,7 @@ class CosmicFengine():
             #kill delay_tracking and DTS thread
             self.stop_delay_tracking()
             self.stop_dts_monitor()
+            self.dts_mon_tx_disable.clear()
 
         for blockname, b in self.blocks.items():
             if (blockname == 'dts' and allow_unlocked_dts):
@@ -474,6 +479,7 @@ class CosmicFengine():
         """
         self.stop_delay_tracking()
         self.stop_dts_monitor()
+        self.dts_mon_tx_disable.clear()
         if fpgfile is None:
             fpgfile = self.fpgfile
 
@@ -691,6 +697,10 @@ class CosmicFengine():
         :param lo_fshift_list: If not None, a list of lo_fshifts in Hz to apply in order of streams.
         :type lo_fshift_list: List
         """
+        
+        self.logger.info('Disabling TX')
+        self.disable_tx()
+
         if program:
             self.program(fpgfile)
         
@@ -715,8 +725,6 @@ class CosmicFengine():
             
         if sync:
             self.logger.info("Arming sync generators")
-            for eth in self.eths:
-                eth.disable_tx()
             self.sync.arm_sync()
             self.sync.arm_noise()
             if sw_sync:
@@ -837,8 +845,6 @@ class CosmicFengine():
 
         if enable_eth:
             self.enable_tx()
-        else:
-            self.disable_tx()
 
         self.logger.info("Startup of %s complete" % self.hostname)
 
@@ -1098,6 +1104,7 @@ class CosmicFengine():
         """
         status = {
             "switch_set": self.dts_mon_switch.is_set(),
+            "tx_disable": self.dts_mon_tx_disable.is_set(),
         }
         if self.dts_mon_thread is None:
             status["is_alive"] = None
@@ -1117,44 +1124,85 @@ class CosmicFengine():
         :type poll_time_s: float
         """
         disabled = False
-        last_bad = False # was the last check bad? Two consecutive bads => disable
+
+        consequetive_bad_limit = 2 # Two consecutive bads => disable
+        consequetive_bad_count = 0
+
         rc = "FENG_dtsMonitor"
         antname = self.fpga.get_connected_antname()
-        message = f"DTS monitor @ {antname}: Starting. Alerting to {rc}."
+        message = f"DTS monitor @ {antname}: Starting."
+        self.logger.info(f"Alerting to {rc} and {rc}_{antname}_alive.")
         self.logger.info(message)
         if self.redis_obj is not None:
             self.redis_obj.publish(rc, message)
         test = False
-        while self.dts_mon_switch.is_set():
-            if self.redis_obj is not None:
-                # Record the fact the thread is alive with an expiring key
-                self.redis_obj.set(rc + "_alive", 1, ex=3)
+        try:
+            while self.dts_mon_switch.is_set():
+                if self.redis_obj is not None:
+                    # Record the fact the thread is alive with an expiring key
+                    self.redis_obj.set(f"{rc}_{antname}_alive", 1, ex=3)
 
-            ok = self.sync.check_timekeeping(verbose=not disabled) #log errors only if they are new
-            if test or (not ok and not disabled):
-                self.logger.error("Timekeeping error!")
-                if self.redis_obj is not None:
-                    self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping error. Not yet disabling.")
-                if last_bad:
-                    self.logger.error("Disabling Ethernet")
-                    disabled = True
-                    self.disable_tx()
+                ok = self.sync.check_timekeeping(verbose=not disabled and consequetive_bad_count > 0) #log errors only if they are new
+
+                if not ok and not disabled:
+                    # increment
+                    consequetive_bad_count += 1
+                if not ok and disabled:
+                    # reset decrements
+                    consequetive_bad_count = consequetive_bad_limit
+                if ok and not disabled:
+                    # reset consequetive streak
+                    consequetive_bad_count = 0
+                if ok and disabled:
+                    # decrement until re-enabled
+                    consequetive_bad_count -= 1
+
+                if test or (not ok and not disabled):
+                    message = f"Timekeeping error. ({consequetive_bad_count}/{consequetive_bad_limit})"
+                    self.logger.warning(message)
                     if self.redis_obj is not None:
-                        self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping error. Disabling.")
-            if test or (ok and disabled):
-                self.logger.warning("Timekeeping recovery!")
-                if self.redis_obj is not None:
-                    self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping recovery. Not yet enabling.")
-                if not last_bad:
-                    self.logger.warning("Enabling Ethernet")
-                    disabled = False
-                    self.enable_tx()
+                        self.redis_obj.publish(rc, f"DTS monitor @ {antname}: {message}")
+
+                    if consequetive_bad_count == consequetive_bad_limit:
+                        message = f"Disabling ethernet: {self.eth_tx}."
+                        self.logger.warning(message)
+                        disabled = True
+                        self.dts_mon_tx_disable.set()
+
+                        # manually disable, leaving self.eth_tx intact
+                        for eth in self.eths:
+                            eth.disable_tx()
+                        if self.redis_obj is not None:
+                            self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping error. {message}")
+
+                if test or (ok and (disabled or consequetive_bad_count > 0)):
+                    message = f"Timekeeping recovery. ({consequetive_bad_limit-consequetive_bad_count}/{consequetive_bad_limit})"
+                    self.logger.warning(message)
                     if self.redis_obj is not None:
-                        self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping recovery. Enabling.")
-            last_bad = not ok
-            time.sleep(poll_time_s)
+                        self.redis_obj.publish(rc, f"DTS monitor @ {antname}: {message}")
+                    
+                    if consequetive_bad_count == 0:
+                        message = f"Enabling ethernet: {self.eth_tx}."
+                        self.logger.warning(message)
+                        disabled = False
+                        self.dts_mon_tx_disable.clear()
+                        
+                        # manually enable, respecting self.eth_tx
+                        for i, eth in enumerate(self.eths):
+                            if self.eth_tx[i]:
+                                eth.enable_tx()
+                        if self.redis_obj is not None:
+                            self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping recovery. {message}")
+
+                time.sleep(poll_time_s)
+        except BaseException as err:
+            message = f"DTS monitor @ {antname}: Encountered error: {repr(err)} ({traceback.format_exc()})"
+            self.logger.error(message)
+            if self.redis_obj is not None:
+                self.redis_obj.publish(rc, message)
         
-        message = f"DTS monitor @ {antname}: Returning."
+        # self.dts_mon_tx_disable.clear()
+        message = f"DTS monitor @ {antname}: Returning. DTS was last {'Bad' if disabled else 'Ok'}, leaving it as such. TX enabled: {self.tx_enabled()}"
         self.logger.info(message)
         if self.redis_obj is not None:
             self.redis_obj.publish(rc, message)
@@ -1495,21 +1543,58 @@ class CosmicFengine():
                                 and fine delays in:
                                 {self.phaserotate.get_time_to_load()} FPGA clocks.""")
 
-    def enable_tx(self):
-        self.logger.info("Enabling Ethernet output")
-        for eth in self.eths:
-            eth.enable_tx()
+    def enable_tx(self, enable_state=None):
+        """
+        Optional enable_state is a list mask of bool for each eth.
+        """
+
+        if enable_state is None or not isinstance(enable_state, list):
+            enable_state = [True for i in range(self.neths)]
+        elif len(enable_state) < self.neths:
+            enable_state.extend([True for i in range(len(enable_state), self.neths)])
+
+        self.logger.info(f"Enabling Ethernet output: {enable_state}")
+        dts_mon_tx_disabled = self.dts_mon_tx_disable.is_set()
+        for i, eth in enumerate(self.eths):
+            if not enable_state[i]:
+                # leave in whatever state it is
+                continue
+
+            self.eth_tx[i] = True # should be enabled
+            if not dts_mon_tx_disabled:
+                eth.enable_tx()
 
     def disable_tx(self):
+        """
+        Returns the tx_enabled() state before the disablement.
+        """
         self.logger.info("Disabling Ethernet output")
-        for eth in self.eths:
+        ret = []
+        for i, eth in enumerate(self.eths):
+            ret.append(eth.tx_enabled())
             eth.disable_tx()
+            self.eth_tx[i] = False
+        return ret
 
     def tx_enabled(self):
         '''
         Returns `[eth.tx_enabled() for eth in self.eths]`. 
         '''
         return [eth.tx_enabled() for eth in self.eths]
+    
+    def get_status_tx(self):
+        """
+        Returns a status dictionary of whether each eth is transmitting
+        as it is supposed to be.
+        """
+        ok = True
+        ret = {}
+        for i, eth in enumerate(self.eths):
+            eth_ok = self.eth_tx[i] == eth.tx_enabled()
+            ret[f"eth_{i}_ok"] = eth_ok
+            ok = ok and eth_ok
+        ret["ok"] = ok
+        return ret
 
     def tx_packet_rate(self):
         '''
