@@ -333,7 +333,6 @@ class CosmicFengine():
             #kill delay_tracking and DTS thread
             self.stop_delay_tracking()
             self.stop_dts_monitor()
-            self.dts_mon_tx_disable.clear()
 
         for blockname, b in self.blocks.items():
             if (blockname == 'dts' and allow_unlocked_dts):
@@ -479,7 +478,7 @@ class CosmicFengine():
         """
         self.stop_delay_tracking()
         self.stop_dts_monitor()
-        self.dts_mon_tx_disable.clear()
+
         if fpgfile is None:
             fpgfile = self.fpgfile
 
