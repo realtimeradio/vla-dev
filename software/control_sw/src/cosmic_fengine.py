@@ -1366,15 +1366,27 @@ class CosmicFengine():
             delay_coeffs = json.loads(self.redis_obj.hget
                                 ("META_modelDelays", f"{self.fpga.get_connected_antname()}"
                                 ))
+            requested_time_to_load = delay_coeffs["time_to_load"]
+            delay_rate_nsps2 = delay_coeffs["delay_raterate_nsps2"]
+            delay_rate_nsps = delay_coeffs["delay_rate_nsps"]
+            delay_ns = delay_coeffs["delay_ns"]
+            fshifts_hz = np.array(delay_coeffs["lo_hz"],dtype=float)                                                          
+            sideband_0 = delay_coeffs["sideband_0"]
+            sideband_1 = delay_coeffs["sideband_1"]
+            effective_lo_0_mhz = delay_coeffs["effective_lo_0_mhz"]
+            effective_lo_1_mhz = delay_coeffs["effective_lo_1_mhz"] 
         except:
             self.logger.error("""Unable to load calibration or geometric delays from 
             'META_calibrationDelays' and 'META_modelDelays', aborting thread...""")
             return
 
+        time_tolerance = 0.1
+        time_now = time.time_ns()*1e-9
+        future_time_mark = time_now + 2 * time_tolerance
         zeros = np.zeros(self.phaserotate.n_streams)
 
         #check that telescope time is correct:
-        if not self.check_delay_time(tolerance= 1e-1):
+        if not self.check_delay_time(tolerance=time_tolerance):
             self.logger.error("""Delay time does not checkout, aborting thread.""")
             return
 
@@ -1389,9 +1401,32 @@ class CosmicFengine():
                 except:
                     self.logger.error(f"Unable to json parse the triggered channel data. Continuing...")
                     continue
+
                 if self.delay_channel_names[0] == message['channel']:
                     #This is a delay value
                     delay_coeffs = message_data
+                    time_now = time.time_ns()*1e-9
+                    future_time_mark = time_now + 2 * time_tolerance
+                    #Get the requested time to load
+                    requested_time_to_load = delay_coeffs["time_to_load"]
+
+                    if requested_time_to_load > future_time_mark:
+                        #Too far in the future, use old values and keep interpolating.
+                        continue
+                    
+                    elif (requested_time_to_load is None or 
+                        requested_time_to_load <= future_time_mark):  
+                        #Update delay coefficient values
+
+                        delay_rate_nsps2 = delay_coeffs["delay_raterate_nsps2"]
+                        delay_rate_nsps = delay_coeffs["delay_rate_nsps"]
+                        delay_ns = delay_coeffs["delay_ns"]
+                        fshifts_hz = np.array(delay_coeffs["lo_hz"],dtype=float)                                                          
+                        sideband_0 = delay_coeffs["sideband_0"]
+                        sideband_1 = delay_coeffs["sideband_1"]
+                        effective_lo_0_mhz = delay_coeffs["effective_lo_0_mhz"]
+                        effective_lo_1_mhz = delay_coeffs["effective_lo_1_mhz"]                      
+                        
 
                 if self.delay_channel_names[1] == message['channel']:
                     #Need to update delay calibration values
@@ -1406,37 +1441,49 @@ class CosmicFengine():
                             continue
 
             else:
-                #No values received, load values on hand
-                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 1e-1)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
-                t_future_seconds = t_future_fpga_clks / FPGA_CLOCK_RATE_HZ
+                #preset load time as time_tolerance into the future
+                load_time_fpga_clks =  int(((time.time_ns() * 1e-9) + time_tolerance)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
+                load_time_seconds = load_time_fpga_clks / FPGA_CLOCK_RATE_HZ
                 
-                # with self._delay_lock:
                 if self.delay_track.is_set():
-                    loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"])
+                    time_now = time.time_ns()*1e-9
+                    future_time_mark = time_now + 2 * time_tolerance
+                    if (requested_time_to_load >= time_now + time_tolerance and 
+                        requested_time_to_load <= future_time_mark):
+                        #We are in the window in which to do a direct load of delay coefficients at the requested load time:
 
-                    # T = 1/2*ax^2 + bx + c + delay_calibrations
-                    delay_to_load = (np.array([0.5*delay_coeffs["delay_raterate_nsps2"]*(loadtime_diff_modeltime**2) + 
-                                        delay_coeffs["delay_rate_nsps"]*loadtime_diff_modeltime + 
-                                        delay_coeffs["delay_ns"]]*self.delay.n_streams,dtype=float) +
+                        delay_to_load = (np.array([delay_ns]*self.delay.n_streams,dtype=float) +
                                         delay_calib)
-                    # dT/dt = ax + b
-                    delay_rate_to_load = np.array([delay_coeffs["delay_raterate_nsps2"]*loadtime_diff_modeltime + 
-                                            delay_coeffs["delay_rate_nsps"]]*self.delay.n_streams,dtype=float)
+                        delay_rate_to_load = np.array([delay_rate_nsps]*self.delay.n_streams,dtype=float)
 
-                    #phase (calculated per tuning)
-                    fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                                           #fshift in Hz
+                        load_time_fpga_clks = requested_time_to_load * FPGA_CLOCK_RATE_HZ                        
+                        load_time_seconds = requested_time_to_load
 
-                    phase_correction_factor = np.concatenate(((2*np.pi) * delay_coeffs["sideband_0"] * fshifts[0:2],                #tuning 0
-                                                            (2*np.pi) * delay_coeffs["sideband_1"] * fshifts[2:4]),axis=0)          #tuning 1
+                    else:
+                        #We are outside the window for a direct load, so interpolate time_tolerance into the future:
+
+                        loadtime_diff_modeltime = (load_time_seconds - delay_coeffs["time_value"])
+
+                        # T = 1/2*ax^2 + bx + c + delay_calibrations
+                        delay_to_load = (np.array([0.5*delay_rate_nsps2*(loadtime_diff_modeltime**2) + 
+                                            delay_rate_nsps*loadtime_diff_modeltime + 
+                                            delay_ns]*self.delay.n_streams,dtype=float) +
+                                            delay_calib)
+                        # dT/dt = ax + b
+                        delay_rate_to_load = np.array([delay_rate_nsps2*loadtime_diff_modeltime + 
+                                                delay_rate_nsps]*self.delay.n_streams,dtype=float)
+
+                    phase_correction_factor = np.concatenate(((2*np.pi) * sideband_0 * fshifts_hz[0:2],             #tuning 0
+                                                            (2*np.pi) * sideband_1 * fshifts_hz[2:4]),axis=0)       #tuning 1
                     
-                    phase_to_load = -1.0 * np.concatenate(((2*np.pi) * delay_coeffs["sideband_0"] * delay_to_load[0:2]
-                                                            * delay_coeffs["effective_lo_0_mhz"] * 1e-3,                            #tuning 0
-                                                            (2*np.pi) * delay_coeffs["sideband_1"] * delay_to_load[2:4] 
-                                                            * delay_coeffs["effective_lo_1_mhz"] * 1e-3),axis=0)                    #tuning 1
-                    phase_rate_to_load = -1.0 * np.concatenate(((2*np.pi) * delay_coeffs["sideband_0"] * delay_rate_to_load[0:2] 
-                                                            * delay_coeffs["effective_lo_0_mhz"] * 1e-3,                            #tuning 0
-                                                            (2*np.pi) * delay_coeffs["sideband_1"] * delay_rate_to_load[2:4] 
-                                                            * delay_coeffs["effective_lo_1_mhz"] * 1e-3),axis=0)                    #tuning 1
+                    phase_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband_0 * delay_to_load[0:2]
+                                                            * effective_lo_0_mhz * 1e-3,                            #tuning 0
+                                                            (2*np.pi) * sideband_1 * delay_to_load[2:4] 
+                                                            * effective_lo_1_mhz * 1e-3),axis=0)                    #tuning 1
+                    phase_rate_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband_0 * delay_rate_to_load[0:2] 
+                                                            * effective_lo_0_mhz * 1e-3,                            #tuning 0
+                                                            (2*np.pi) * sideband_1 * delay_rate_to_load[2:4] 
+                                                            * effective_lo_1_mhz * 1e-3),axis=0)                    #tuning 1
 
                     #half delay off state 
                     if self.delay_halfoff.is_set():
@@ -1453,21 +1500,23 @@ class CosmicFengine():
                 else:
                     #Zero array
                     delay_to_load = delay_calib
-                    delay_rate_to_load = zeros
-                    phase_to_load = zeros
-                    phase_rate_to_load = zeros
-                    phase_correction_factor = zeros
+                    delay_rate_to_load = zeros.copy()
+                    phase_to_load = zeros.copy()
+                    phase_rate_to_load = zeros.copy()
+                    phase_correction_factor = zeros.copy()
 
                 #Load delays:
                 self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, phase_correction_factor,
                                 clock_rate_hz=2048000000, invert_band = False)
                 
-                if(t_future_seconds > (time.time_ns()*1e-9)):
-                    self.delay.set_target_load_time(t_future_fpga_clks)
-                    self.phaserotate.set_target_load_time(t_future_fpga_clks)
+                time_now = (time.time_ns()*1e-9)
+                if(load_time_seconds > time_now):
+                    #it will if time tolerance is large enough or if requested load time is sufficiently far in future
+                    self.delay.set_target_load_time(load_time_fpga_clks)
+                    self.phaserotate.set_target_load_time(load_time_fpga_clks)
                 else:
-                    self.logger.warn(f"""Delays calculated for time {t_future_seconds} is in the past.""")
-                    if not self.check_delay_time(tolerance= 1e-1): 
+                    self.logger.warn(f"""Delays calculated for time {time_now - load_time_seconds}s in the past.""")
+                    if not self.check_delay_time(tolerance= time_tolerance): 
                         self.logger.error(f"Aborting thread.")
                         return
                     continue
@@ -1476,7 +1525,7 @@ class CosmicFengine():
                     time.sleep(self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ)  
                 except ValueError:
                     self.logger.warn(f"""Tried to sleep for negative time.""")
-                    if not self.check_delay_time(tolerance= 1e-1): 
+                    if not self.check_delay_time(tolerance= time_tolerance): 
                         self.logger.error(f"Aborting thread.")
                         return
                     continue
