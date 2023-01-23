@@ -1142,7 +1142,16 @@ class CosmicFengine():
                     # Record the fact the thread is alive with an expiring key
                     self.redis_obj.set(f"{rc}_{antname}_alive", 1, ex=3)
 
-                ok = self.sync.check_timekeeping(verbose=not disabled and consequetive_bad_count > 0) #log errors only if they are new
+                try:
+                    ok = self.sync.check_timekeeping(verbose=not disabled and consequetive_bad_count > 0) #log errors only if they are new
+                except BaseException as err:
+                    ok = False
+
+                    message = f"Encountered {repr(err)} while checking timekeeping. ({traceback.format_exc()})"
+                    self.logger.error(message)
+                    if self.redis_obj is not None:
+                        message = message.replace('\n', '\t')
+                        self.redis_obj.publish(rc, f"DTS monitor @ {antname}: {message}")
 
                 if not ok and not disabled:
                     # increment
@@ -1196,10 +1205,11 @@ class CosmicFengine():
 
                 time.sleep(poll_time_s)
         except BaseException as err:
-            message = f"DTS monitor @ {antname}: Encountered error: {repr(err)} ({traceback.format_exc()})"
+            message = f"Encountered {repr(err)}. ({traceback.format_exc()})"
             self.logger.error(message)
             if self.redis_obj is not None:
-                self.redis_obj.publish(rc, message)
+                message = message.replace('\n', '\t')
+                self.redis_obj.publish(rc, f"DTS monitor @ {antname}: {message}")
         
         # self.dts_mon_tx_disable.clear()
         message = f"DTS monitor @ {antname}: Returning. DTS was last {'Bad' if disabled else 'Ok'}, leaving it as such. TX enabled: {self.tx_enabled()}"
