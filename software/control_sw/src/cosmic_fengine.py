@@ -1125,8 +1125,8 @@ class CosmicFengine():
         """
         disabled = False
 
-        consequetive_bad_limit = 2 # Two consecutive bads => disable
-        consequetive_bad_count = 0
+        consecutive_bad_limit = 2 # Two consecutive bads => disable
+        consecutive_bad_count = 0
 
         rc = "FENG_dtsMonitor"
         antname = self.fpga.get_connected_antname()
@@ -1143,7 +1143,7 @@ class CosmicFengine():
                     self.redis_obj.set(f"{rc}_{antname}_alive", 1, ex=3)
 
                 try:
-                    ok = self.sync.check_timekeeping(verbose=not disabled and consequetive_bad_count > 0) #log errors only if they are new
+                    ok = self.sync.check_timekeeping(verbose=not disabled and consecutive_bad_count > 0) #log errors only if they are new
                 except BaseException as err:
                     ok = False
 
@@ -1155,24 +1155,24 @@ class CosmicFengine():
 
                 if not ok and not disabled:
                     # increment
-                    consequetive_bad_count += 1
+                    consecutive_bad_count += 1
                 if not ok and disabled:
                     # reset decrements
-                    consequetive_bad_count = consequetive_bad_limit
+                    consecutive_bad_count = consecutive_bad_limit
                 if ok and not disabled:
-                    # reset consequetive streak
-                    consequetive_bad_count = 0
+                    # reset consecutive streak
+                    consecutive_bad_count = 0
                 if ok and disabled:
                     # decrement until re-enabled
-                    consequetive_bad_count -= 1
+                    consecutive_bad_count -= 1
 
                 if test or (not ok and not disabled):
-                    message = f"Timekeeping error. ({consequetive_bad_count}/{consequetive_bad_limit})"
+                    message = f"Timekeeping error. ({consecutive_bad_count}/{consecutive_bad_limit})"
                     self.logger.warning(message)
                     if self.redis_obj is not None:
                         self.redis_obj.publish(rc, f"DTS monitor @ {antname}: {message}")
 
-                    if consequetive_bad_count == consequetive_bad_limit:
+                    if consecutive_bad_count == consecutive_bad_limit:
                         message = f"Disabling ethernet: {self.eth_tx}."
                         self.logger.warning(message)
                         disabled = True
@@ -1184,13 +1184,13 @@ class CosmicFengine():
                         if self.redis_obj is not None:
                             self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping error. {message}")
 
-                if test or (ok and (disabled or consequetive_bad_count > 0)):
-                    message = f"Timekeeping recovery. ({consequetive_bad_limit-consequetive_bad_count}/{consequetive_bad_limit})"
+                if test or (ok and (disabled or consecutive_bad_count > 0)):
+                    message = f"Timekeeping recovery. ({consecutive_bad_limit-consecutive_bad_count}/{consecutive_bad_limit})"
                     self.logger.warning(message)
                     if self.redis_obj is not None:
                         self.redis_obj.publish(rc, f"DTS monitor @ {antname}: {message}")
                     
-                    if consequetive_bad_count == 0:
+                    if consecutive_bad_count == 0:
                         message = f"Enabling ethernet: {self.eth_tx}."
                         self.logger.warning(message)
                         disabled = False
