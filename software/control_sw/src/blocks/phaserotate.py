@@ -35,10 +35,11 @@ class PhaseRotate(Block):
     _PHASE_BP = 31
     _PHASE_RATE_BW=32
     _PHASE_RATE_BP=31
+    _PHASE_SLOPE_NONINT_BITS=5 # Number of internal non-integer bits for phase slope calculation
     _CAL_PHASE_BW = 16
     _CAL_PHASE_BP = 15
     _FIRMWARE_PHASE_BP = 31
-    _FIRMWARE_SLOPE_BP = 31
+    _FIRMWARE_SLOPE_BP = 31 - _PHASE_SLOPE_NONINT_BITS
 
     MAX_DELAY = (2**(_DELAY_BW -1) -1) / (2**_DELAY_BP)
     MAX_DELAY_RATE = (2**(_DELAY_RATE_BW-1) -1) / (2**_DELAY_RATE_BP)
