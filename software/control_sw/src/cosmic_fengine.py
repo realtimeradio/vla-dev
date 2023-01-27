@@ -1589,6 +1589,8 @@ class CosmicFengine():
         '''
         Returns `[eth.tx_enabled() for eth in self.eths]`. 
         '''
+        if not hasattr(self, "eths"):
+            return []
         return [eth.tx_enabled() for eth in self.eths]
     
     def get_status_tx(self):
