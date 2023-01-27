@@ -892,6 +892,21 @@ class CosmicFengine():
         else:
             raise RuntimeError("Cannot set F-shift load time for time in the past.")
 
+    def get_lo_fshift_list(self, return_in_hz = True):
+        """
+        Get a list of the LO Frequency-shifts applied for all streams.
+        
+        :param return_in_hz: return the frequency shift in Hz if True. Else
+            return a tuple (phase_step, scale), indicating that the underlying
+            phase is being incremented by phase_step*2pi radians every 2**scale
+            ADC samples.
+        :type return_in_hz: bool
+        """
+        return [
+            self.lo.get_lo_frequency_shift(stream, return_in_hz=return_in_hz)
+            for stream in range(self.lo.n_streams)
+        ]
+
     def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
                     phase_correction_factor, clock_rate_hz=2048000000, invert_band=False):
         """
