@@ -1500,6 +1500,84 @@ class CosmicFengine():
         self.logger.info("Delay switch is cleared, returning.")
 
 
+    def set_delay_tracking_mode(self, delay_mode):
+        """
+        Sets up internal delay tracking mode according to the provided mode.
+
+        :param delay_mode: The delay tracking mode, one of the following with
+            False being the fallback:
+            True, "fixed-only", "half-off", "half-cal", "half-phase",
+            "half-corrected-phase", "full-corrected-phase", False
+        :type delay_mode: string or boolean
+        """
+
+        if delay_mode == True:
+            self.delay_halfoff.clear()
+            self.delay_halfcal.clear()
+            self.delay_halfphase.clear()
+            self.delay_halfphasecorrection.clear()
+            self.delay_track.set()
+            self.start_delay_tracking()
+            return
+        elif delay_mode == "fixed-only":
+            self.delay_halfoff.clear()
+            self.delay_halfcal.clear()
+            self.delay_halfphase.clear()
+            self.delay_halfphasecorrection.clear()
+            self.delay_track.clear()
+            self.start_delay_tracking()
+            return
+        elif delay_mode == "half-off":
+            self.delay_track.set()
+            self.delay_halfcal.clear()
+            self.delay_halfphase.clear()
+            self.delay_halfphasecorrection.clear()
+            self.delay_halfoff.set()
+            self.start_delay_tracking()
+            return
+        elif delay_mode == "half-cal":
+            self.delay_track.set()
+            self.delay_halfoff.clear()
+            self.delay_halfphase.clear()
+            self.delay_halfphasecorrection.clear()
+            self.delay_halfcal.set()
+            self.start_delay_tracking()
+            return
+        elif delay_mode == "half-phase":
+            self.delay_track.set()
+            self.delay_halfoff.clear()
+            self.delay_halfcal.clear()
+            self.delay_halfphasecorrection.clear()
+            self.delay_halfphase.set()
+            self.start_delay_tracking()
+            return
+        elif delay_mode == "half-corrected-phase":
+            self.delay_track.set()
+            self.delay_halfoff.clear()
+            self.delay_halfcal.clear()
+            self.delay_halfphase.clear()
+            self.delay_halfphasecorrection.set()
+            self.start_delay_tracking()
+            return
+        elif delay_mode == "full-corrected-phase":
+            self.delay_track.set()
+            self.delay_halfoff.clear()
+            self.delay_halfcal.clear()
+            self.delay_halfphase.clear()
+            self.delay_halfphasecorrection.clear()
+            self.delay_fullphasecorrection.set()
+            self.start_delay_tracking()
+            return
+        
+        # delay_mode == False or unknown, disable delay_tracking
+        self.stop_delay_tracking()
+        self.delay_track.clear()
+        self.delay_halfphase.clear()
+        self.delay_halfphasecorrection.clear()
+        self.delay_halfoff.clear()
+        self.delay_halfcal.clear()
+
+
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, sideband, fshifts,
                              load_time=None, clock_rate_hz=2048000000, invert_band=False):
