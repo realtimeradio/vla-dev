@@ -873,12 +873,28 @@ class CosmicFengine():
             f"{self.fpga.get_connected_antname()}_delays",
             "update_calibration_delays"]
 
-    def set_lo_fshift_list(self, lo_fshift_list):
+    def set_lo_fshift_list(self, lo_fshift_list, skip_if_equal=False):
         """
         Apply and load the provided list of LO FShift values, blocking until after the load.
+
         :param lo_fshift_list: The list of LO FShifts in Hz to apply, in order of streams.
         :type lo_fshift_list: List
+        :param skip_if_equal: Whether or not to only set the values if they are different.
+        :type skip_if_equal: bool
         """
+        if skip_if_equal:
+            equal = True
+            for stream, fshift in enumerate(lo_fshift_list):
+                fshift_set = self.lo.get_lo_frequency_shift(stream, return_in_hz=True)
+                if fshift == fshift_set:
+                    continue
+                self.logger.info(f"F-Shift for stream {stream} is different: {fshift_set} != requested {fshift}.")
+                equal = False
+                break
+            if equal:
+                self.logger.info(f"F-Shift values match what is set, not setting again: {lo_fshift_list}.")
+                return
+
         self.lo.set_reload_repeat_period(int(2048e6))
 
         for stream, offshift in enumerate(lo_fshift_list):
