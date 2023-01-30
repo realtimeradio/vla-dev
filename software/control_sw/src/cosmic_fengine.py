@@ -1411,7 +1411,7 @@ class CosmicFengine():
         #Open the outer while loop for the redis channel listener:
         while self.delay_tracking_switch.is_set():
             #Fetch message from subscribed channels
-            message = self.redis_pubsub.get_message(timeout=0.0001)
+            message = self.redis_pubsub.get_message(timeout=0.01)
 
             if message and "message" == message["type"]:
                 try:
@@ -1437,12 +1437,12 @@ class CosmicFengine():
 
             else:
                 #No values received, load values on hand
-                t_future_fpga_clks =  int(((time.time_ns() * 1e-9) + 1e-1)  * FPGA_CLOCK_RATE_HZ) #in fpga clocks per spectra
-                t_future_seconds = t_future_fpga_clks / FPGA_CLOCK_RATE_HZ
+                required_loadtime_s = int(delay_coeffs['loadtime']) #assuming in integer seconds
+                required_loadtime_fpga_clks = required_loadtime_s * FPGA_CLOCK_RATE_HZ
                 
-                # with self._delay_lock:
                 if self.delay_track.is_set():
-                    loadtime_diff_modeltime = (t_future_seconds - delay_coeffs["time_value"])
+                    #interpolate to the required loadtime, given the time at which the coefficients were calculated
+                    loadtime_diff_modeltime = (required_loadtime_s - delay_coeffs["time_value"])
 
                     # T = 1/2*ax^2 + bx + c + delay_calibrations
                     delay_to_load = (np.array([0.5*delay_coeffs["delay_raterate_nsps2"]*(loadtime_diff_modeltime**2) + 
@@ -1492,11 +1492,14 @@ class CosmicFengine():
                 self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, phase_correction_factor,
                                 clock_rate_hz=2048000000, invert_band = False)
                 
-                if(t_future_seconds > (time.time_ns()*1e-9)):
-                    self.delay.set_target_load_time(t_future_fpga_clks)
-                    self.phaserotate.set_target_load_time(t_future_fpga_clks)
+                if(required_loadtime_s > (time.time_ns()*1e-9 + 1e-2)):
+                    #give a bit of room for the loadtime
+                    self.delay.set_target_load_time(required_loadtime_fpga_clks)
+                    self.phaserotate.set_target_load_time(required_loadtime_fpga_clks)
                 else:
-                    self.logger.warn(f"""Delays calculated for time {t_future_seconds} is in the past.""")
+                    self.logger.warn(
+                    f"""Delays calculated for time {time.ctime(required_loadtime_s)} is not sufficiently far into the future.
+                    Time now: {time.ctime()}""")
                     if not self.check_delay_time(tolerance= 1e-1): 
                         self.logger.error(f"Aborting thread.")
                         return
