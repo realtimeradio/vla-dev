@@ -871,7 +871,7 @@ class CosmicFengine():
         #set the redis channels on which this object listens for delay tracking (name dependant):
         self.delay_channel_names = [
             f"{self.fpga.get_connected_antname()}_delays",
-            "update_calibration_delays"]
+            "update_calibration_delays", "update_calibration_phases"]
 
     def set_lo_fshift_list(self, lo_fshift_list, skip_if_equal=False):
         """
@@ -1379,6 +1379,16 @@ class CosmicFengine():
             return False
         return True
 
+    def load_received_phase_calibration_values(self, phase_cal_to_load):
+        """
+        To avoid repeated code, function to load phase calibration values to the F-Engine.
+
+        :param phase_cal_to_load: an n_streams by n_chans list of phase calibration values in radians.
+        :type phase_cal_to_load: ndarray{float}
+        """
+        for stream in range(self.phaserotate.n_streams):
+            self.phaserotate.set_phase_cal(stream, phase_cal_to_load[stream, :].tolist())
+
     def delay_tracking(self):
         """
         Started in a thread, this function calls on `set_delays` to update the F-Engine coefficients for 
@@ -1393,6 +1403,10 @@ class CosmicFengine():
             delay_calib = np.fromiter(json.loads(self.redis_obj.hget
                                 ("META_calibrationDelays", f"{self.fpga.get_connected_antname()}"
                                 )).values(),dtype=float)
+            phase_calib = np.array(json.loads(self.redis_obj.hget
+                                ("META_calibrationPhases", f"{self.fpga.get_connected_antname()}"
+                                )),dtype=float) # (nstreams by nchans list)
+            self.load_received_phase_calibration_values(phase_calib)
             delay_coeffs = json.loads(self.redis_obj.hget
                                 ("META_modelDelays", f"{self.fpga.get_connected_antname()}"
                                 ))
@@ -1433,6 +1447,19 @@ class CosmicFengine():
                             self.logger.debug("Received trigger to load new calibration delays from 'META_calibrationDelays'.")
                         except BaseException:
                             self.logger.error("Unable to load calibration delays from 'META_calibrationDelays', Continuing...")
+                            continue
+
+                if self.delay_channel_names[2] == message['channel']:
+                    #Need to update phase calibration values
+                    if message_data:
+                        try:
+                            phase_calib = np.array(json.loads(self.redis_obj.hget
+                                ("META_calibrationPhases", f"{self.fpga.get_connected_antname()}"
+                                )),dtype=float) # (nstreams by nchans list)
+                            self.load_received_phase_calibration_values(phase_calib)
+                            self.logger.debug("Received trigger to load new calibration phases from 'META_calibrationPhases'.")
+                        except BaseException:
+                            self.logger.error("Unable to load calibration phases from 'META_calibrationPhases', Continuing...")
                             continue
 
             else:
