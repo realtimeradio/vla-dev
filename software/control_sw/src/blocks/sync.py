@@ -42,6 +42,15 @@ class Sync(Block):
         self.sync_wait_timeout_limit_s = 0.5
         self.sync_wait_sleep_period_s = 0.0005
     
+
+    def offset(self):
+        """
+        :return: Nanosecond offset.
+
+        :rtype: float
+        """
+        return self.offset_ns
+
     def uptime(self):
         """
         :return: Time in FPGA clock ticks since the FPGA was last programmed.
