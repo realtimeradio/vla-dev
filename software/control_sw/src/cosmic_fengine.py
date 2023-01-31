@@ -1396,6 +1396,16 @@ class CosmicFengine():
             delay_coeffs = json.loads(self.redis_obj.hget
                                 ("META_modelDelays", f"{self.fpga.get_connected_antname()}"
                                 ))
+            #update values
+            delay_ns = delay_coeffs["delay_ns"]
+            delay_rate_nsps = delay_coeffs["delay_rate_nsps"]
+            delay_raterate_nsps2 = delay_coeffs["delay_raterate_nsps2"]
+            sideband_0 = delay_coeffs["sideband_0"]
+            sideband_1 = delay_coeffs["sideband_1"]
+            sslo_0 = delay_coeffs["effective_lo_0_mhz"]
+            sslo_1 = delay_coeffs["effective_lo_1_mhz"]
+            fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                                           #fshift in Hz
+
         except:
             self.logger.error("""Unable to load calibration or geometric delays from 
             'META_calibrationDelays' and 'META_modelDelays', aborting thread...""")
@@ -1437,36 +1447,54 @@ class CosmicFengine():
 
             else:
                 #No values received, load values on hand
-                required_loadtime_s = int(delay_coeffs['loadtime']) #assuming in integer seconds
-                required_loadtime_fpga_clks = required_loadtime_s * FPGA_CLOCK_RATE_HZ
-                
+                t = time.time() * 1e6 # received loadtime is in microseconds so compare against time now in microseconds
+
+                if (delay_coeffs['loadtime_us'] < (t + 1e5)
+                    or 
+                    delay_coeffs['loadtime_us'] > (t + 1e6)):
+                    #if the provided loadtime is not at least 1e-1s into the future or more than 1s into the future
+                    required_loadtime_us = t + 1e6 # interpolate one second into the future on the old delay coefficients
+                    required_loadtime_s = required_loadtime_us * 1e-6
+                else:
+                    #if the provided loadtime is in the future but within 1 second 
+                    required_loadtime_us = int(delay_coeffs['loadtime'])
+                    required_loadtime_s = required_loadtime_us * 1e-6
+                    #update values
+                    delay_ns = delay_coeffs["delay_ns"]
+                    delay_rate_nsps = delay_coeffs["delay_rate_nsps"]
+                    delay_raterate_nsps2 = delay_coeffs["delay_raterate_nsps2"]
+                    sideband_0 = delay_coeffs["sideband_0"]
+                    sideband_1 = delay_coeffs["sideband_1"]
+                    sslo_0 = delay_coeffs["effective_lo_0_mhz"]
+                    sslo_1 = delay_coeffs["effective_lo_1_mhz"]
+                    fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                           #fshift in Hz
+
+                required_loadtime_fpga_clks = int((required_loadtime_us * FPGA_CLOCK_RATE_HZ) * 1e-6) #should give us fpga_clks in microsecond precision
+
                 if self.delay_track.is_set():
                     #interpolate to the required loadtime, given the time at which the coefficients were calculated
                     loadtime_diff_modeltime = (required_loadtime_s - delay_coeffs["time_value"])
 
                     # T = 1/2*ax^2 + bx + c + delay_calibrations
-                    delay_to_load = (np.array([0.5*delay_coeffs["delay_raterate_nsps2"]*(loadtime_diff_modeltime**2) + 
-                                        delay_coeffs["delay_rate_nsps"]*loadtime_diff_modeltime + 
-                                        delay_coeffs["delay_ns"]]*self.delay.n_streams,dtype=float) +
+                    delay_to_load = (np.array([0.5*delay_raterate_nsps2*(loadtime_diff_modeltime**2) + 
+                                        delay_rate_nsps*loadtime_diff_modeltime + 
+                                        delay_ns]*self.delay.n_streams,dtype=float) +
                                         delay_calib)
                     # dT/dt = ax + b
-                    delay_rate_to_load = np.array([delay_coeffs["delay_raterate_nsps2"]*loadtime_diff_modeltime + 
-                                            delay_coeffs["delay_rate_nsps"]]*self.delay.n_streams,dtype=float)
+                    delay_rate_to_load = np.array([delay_raterate_nsps2*loadtime_diff_modeltime + 
+                                            delay_rate_nsps]*self.delay.n_streams,dtype=float)
 
-                    #phase (calculated per tuning)
-                    fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                                           #fshift in Hz
-
-                    phase_correction_factor = np.concatenate(((2*np.pi) * delay_coeffs["sideband_0"] * fshifts[0:2],                #tuning 0
-                                                            (2*np.pi) * delay_coeffs["sideband_1"] * fshifts[2:4]),axis=0)          #tuning 1
+                    phase_correction_factor = np.concatenate(((2*np.pi) * sideband_0 * fshifts[0:2],                #tuning 0
+                                                            (2*np.pi) * sideband_1 * fshifts[2:4]),axis=0)          #tuning 1
                     
-                    phase_to_load = -1.0 * np.concatenate(((2*np.pi) * delay_coeffs["sideband_0"] * delay_to_load[0:2]
-                                                            * delay_coeffs["effective_lo_0_mhz"] * 1e-3,                            #tuning 0
-                                                            (2*np.pi) * delay_coeffs["sideband_1"] * delay_to_load[2:4] 
-                                                            * delay_coeffs["effective_lo_1_mhz"] * 1e-3),axis=0)                    #tuning 1
-                    phase_rate_to_load = -1.0 * np.concatenate(((2*np.pi) * delay_coeffs["sideband_0"] * delay_rate_to_load[0:2] 
-                                                            * delay_coeffs["effective_lo_0_mhz"] * 1e-3,                            #tuning 0
-                                                            (2*np.pi) * delay_coeffs["sideband_1"] * delay_rate_to_load[2:4] 
-                                                            * delay_coeffs["effective_lo_1_mhz"] * 1e-3),axis=0)                    #tuning 1
+                    phase_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband_0 * delay_to_load[0:2]
+                                                            * sslo_0 * 1e-3,                                        #tuning 0
+                                                            (2*np.pi) * sideband_1 * delay_to_load[2:4] 
+                                                            * sslo_1 * 1e-3),axis=0)                                #tuning 1
+                    phase_rate_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband_0 * delay_rate_to_load[0:2] 
+                                                            * sslo_0 * 1e-3,                                        #tuning 0
+                                                            (2*np.pi) * sideband_1 * delay_rate_to_load[2:4] 
+                                                            * sslo_1 * 1e-3),axis=0)                                #tuning 1
 
                     #half delay off state 
                     if self.delay_halfoff.is_set():
@@ -1493,7 +1521,7 @@ class CosmicFengine():
                                 clock_rate_hz=2048000000, invert_band = False)
                 
                 if(required_loadtime_s > (time.time_ns()*1e-9 + 1e-2)):
-                    #give a bit of room for the loadtime
+                    #give 5ms of room for the loading of the loadtime
                     self.delay.set_target_load_time(required_loadtime_fpga_clks)
                     self.phaserotate.set_target_load_time(required_loadtime_fpga_clks)
                 else:
@@ -1506,7 +1534,14 @@ class CosmicFengine():
                     continue
                 try:
                     # sleep till time to load == 0 (to allow for loading)
-                    time.sleep(self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ)  
+                    expected_sleep_duration = required_loadtime_s - time.time_ns()*1e-9
+                    feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
+                    assert (np.isclose(feng_time_to_load, expected_sleep_duration, atol=1e-4),
+                            f"Time to load from the F-Engine {feng_time_to_load}s is not within 0.1ms of the expected time to load {expected_sleep_duration}s.")
+                    time.sleep(expected_sleep_duration)  
+                    feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
+                    assert (np.isclose(feng_time_to_load, 0.0, atol=1e-4),
+                            f"After sleeping, time to load from the F-Engine {feng_time_to_load}s is not near zero.")
                 except ValueError:
                     self.logger.warn(f"""Tried to sleep for negative time.""")
                     if not self.check_delay_time(tolerance= 1e-1): 
