@@ -1211,7 +1211,7 @@ class CosmicFengine():
                         # manually disable, leaving self.eth_tx intact
                         for eth in self.eths:
                             # eth.disable_tx()
-                            eth.change_reg_bits('ctrl', 1, 0)
+                            eth.core.fabric_disable()
                         if self.redis_obj is not None:
                             self.redis_obj.publish(rc, f"DTS monitor @ {antname}: Timekeeping error. {message}")
 
@@ -1691,7 +1691,7 @@ class CosmicFengine():
         ret = []
         for i, eth in enumerate(self.eths):
             ret.append(eth.tx_enabled())
-            eth.change_reg_bits('ctrl', 1, 0)
+            eth.core.fabric_disable()
             # eth.disable_tx()
             self.eth_tx[i] = False
         return ret
