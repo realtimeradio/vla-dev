@@ -1011,7 +1011,7 @@ class CosmicFengine():
                 self.logger.error(f"Error encountered in settting delays and phases: {err}")
                 return
 
-    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
+    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, loadtime,
                             clock_rate_hz=2048000000, invert_band = False):
         """
         From the delay and delay rate values for this fengine instance, calculate an expected delay
@@ -1030,6 +1030,8 @@ class CosmicFengine():
         :type phase_to_load: ndarray{float}
         :param phase_rate_to_load: The n_streams phase rates (radians/s) that the delay loading thread believes was loaded.
         :type phase_rate_to_load: ndarray{float}
+        :param loadtime: The time in seconds at which the delays were loaded.
+        :type loadtime: float
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
@@ -1067,7 +1069,9 @@ class CosmicFengine():
                     "firmware_phase_rad" : np.round(firm_phase,decimals=4).tolist(),
                     "delay_correct"  : np.isclose(exp_delay,firm_delay,atol=1e-3).tolist(),
                     "phase_correct"  : np.isclose(exp_phase,firm_phase,atol=1e-3).tolist(),
-                    "time_since_load_sec" : round(time_since_load,8)
+                    "time_since_load_sec" : round(time_since_load,8),
+                    "delays_loaded_at" : loadtime,
+                    "loadtime_accurate" : bool(np.isclose((time.time() - time_since_load),loadtime,atol=1e-6))
                     })
                 )
         except:
@@ -1577,7 +1581,7 @@ class CosmicFengine():
                         self.logger.error(f"Aborting thread.")
                         return
                     continue
-                self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
+                self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, required_loadtime_s,
                                         clock_rate_hz=2048000000, invert_band = False)
     
         self.logger.info("Delay switch is cleared, returning.")
