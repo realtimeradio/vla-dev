@@ -1485,7 +1485,7 @@ class CosmicFengine():
                 else:
                     self.logger.debug("Delay coefficients received have a target loadtime within range. Updating delay coefficients...")
                     #if the provided loadtime is in the future but within 1 second 
-                    required_loadtime_us = int(delay_coeffs['loadtime'])
+                    required_loadtime_us = int(delay_coeffs['loadtime_us'])
                     required_loadtime_s = required_loadtime_us * 1e-6
                     #update values
                     delay_ns = delay_coeffs["delay_ns"]
