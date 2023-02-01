@@ -1470,7 +1470,7 @@ class CosmicFengine():
                     sslo_1 = delay_coeffs["effective_lo_1_mhz"]
                     fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                           #fshift in Hz
 
-                required_loadtime_fpga_clks = int((required_loadtime_us * FPGA_CLOCK_RATE_HZ) * 1e-6) #should give us fpga_clks in microsecond precision
+                required_loadtime_fpga_clks = int((required_loadtime_us * FPGA_CLOCK_RATE_HZ) // 1000000) #should give us fpga_clks in microsecond precision
 
                 if self.delay_track.is_set():
                     #interpolate to the required loadtime, given the time at which the coefficients were calculated
