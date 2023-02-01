@@ -1456,6 +1456,7 @@ class CosmicFengine():
                     required_loadtime_us = t + 1e6 # interpolate one second into the future on the old delay coefficients
                     required_loadtime_s = required_loadtime_us * 1e-6
                 else:
+                    self.logger.debug("Delay coefficients received have a target loadtime within range. Updating delay coefficients...")
                     #if the provided loadtime is in the future but within 1 second 
                     required_loadtime_us = int(delay_coeffs['loadtime'])
                     required_loadtime_s = required_loadtime_us * 1e-6
@@ -1520,8 +1521,8 @@ class CosmicFengine():
                 self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, phase_correction_factor,
                                 clock_rate_hz=2048000000, invert_band = False)
                 
-                if(required_loadtime_s > (time.time_ns()*1e-9 + 1e-2)):
-                    #give 5ms of room for the loading of the loadtime
+                if(required_loadtime_s > (time.time_ns()*1e-9 + 1e-1)):
+                    #give 100ms of room for the loading of the loadtime
                     self.delay.set_target_load_time(required_loadtime_fpga_clks)
                     self.phaserotate.set_target_load_time(required_loadtime_fpga_clks)
                 else:
@@ -1538,6 +1539,7 @@ class CosmicFengine():
                     feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
                     assert (np.isclose(feng_time_to_load, expected_sleep_duration, atol=1e-4),
                             f"Time to load from the F-Engine {feng_time_to_load}s is not within 0.1ms of the expected time to load {expected_sleep_duration}s.")
+                    assert (feng_time_to_load > 0, f"F-Engine time to load is not positive = {feng_time_to_load}. This means the load will likely be unsuccessful.")
                     time.sleep(expected_sleep_duration)  
                     feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
                     assert (np.isclose(feng_time_to_load, 0.0, atol=1e-4),
