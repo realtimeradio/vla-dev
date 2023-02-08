@@ -134,6 +134,25 @@ class Dts(Block):
                 out[lane] = v
         return out
 
+    def check_lane_ids(self):
+        """
+        Read the DTS encoded lane IDs, and the currently
+        loaded lane map, and verify that there combine to
+        something plausible.
+
+        :return: True if things look OK. False otherwise
+        :rtype: bool
+        """
+        l = self.get_lane_ids()
+        m = self.get_lane_map()
+        v = [l[i] for i in m]
+        # After mapping, lanes should run 11,12,13,11,12,13,...
+        exp_map = [11, 12, 13]
+        for i in range(self.nlanes):
+            if v[i] != (exp_map[i % 3]):
+                return False
+        return True
+
     def unmute(self):
         """
         Internally enable data output.
@@ -201,6 +220,21 @@ class Dts(Block):
             x += (self.lane_map[i] << (4*i))
         self._write_reg(x & 0xffffffff, 2)
         self._write_reg(x >> 32, 3)
+
+    def get_lane_map(self):
+        """
+        Get the currently loade lane map.
+
+        :return: Lane map
+        :rtype: list
+        """
+        lane_map = [0 for _ in range(self.nlanes)]
+        x = (self._read_reg(3) << 32)
+        x += self._read_reg(2)
+        for i in range(self.nlanes):
+            lane_map[i] = (x >> (4*i)) & 0xf
+        self.lane_map = lane_map
+        return lane_map
 
     def _latch_parity_errs(self):
         for i in range(self.nlanes):
