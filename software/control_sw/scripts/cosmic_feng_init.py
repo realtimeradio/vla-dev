@@ -4,7 +4,6 @@ import os
 import argparse
 import yaml
 import logging
-from cosmic_f import cosmic_fengine
 
 DEFAULT_FPGFILE = '/home/cosmic/src/vla-dev/adm_pcie_9h7_dts_dual_2x100g_dsp_8b/outputs/cosmic_feng_8b.fpg'
 
@@ -30,7 +29,10 @@ def main():
     parser.add_argument('-f','--fpgfile', type=str, default=DEFAULT_FPGFILE,
                         help='Path to .fpg firmware file')
     parser.add_argument('-R','--remote', type=str, default=None,
-                        help='URI to remote REST server')
+                        help='URI to remote REST server ')
+    parser.add_argument('--remotefengine', action='store_true',
+                        help='If True, use a `cosmic_f_remote` rather than just RemotePcieTransport. '
+                        'You should provide a remote URI (e.g. http://cosmic-fpga-0:6000)')
     parser.add_argument('--neth', type=int, default=1,
                         help='Number of Ethernet outputs possessed by this pipeline')
     parser.add_argument('fpga_id', type=str, default=0,
@@ -39,11 +41,23 @@ def main():
                         help='Pipeline ID on chosen FPGA card')
     args = parser.parse_args()
 
+    if not args.remotefengine:
+        from cosmic_f import cosmic_fengine
+    else:
+        if args.remote is None:
+            raise ValueError('Must supply remote URI with --remote if using --remotefengine')
+        import cosmic_f_remote as cosmic_fengine
 
-    f = cosmic_fengine.CosmicFengine(
-        args.fpga_id, args.fpgfile, pipeline_id=args.pipeline_id, neths=args.neth,
-        remote_uri=args.remote
-    )
+    if not args.remotefengine:
+        f = cosmic_fengine.CosmicFengine(
+            args.fpga_id, args.fpgfile, pipeline_id=args.pipeline_id, neths=args.neth,
+            remote_uri=args.remote
+        )
+    else:
+        f = cosmic_fengine.CosmicFengine(
+            args.fpga_id, args.remote, pipeline_id=args.pipeline_id, attribute_depth_allowance=5
+        )
+
 
     f.cold_start_from_config(
             args.outputconfig,

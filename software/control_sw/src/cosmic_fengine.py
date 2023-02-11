@@ -39,7 +39,7 @@ FPGA_CLOCK_RATE_HZ = 256000000
 FIRMWARE_TYPE_8BIT = 2
 FIRMWARE_TYPE_3BIT = 3
 DEFAULT_FIRMWARE_TYPE = FIRMWARE_TYPE_8BIT
-DEFAULT_DTS_LANE_MAPS = [[0,1,3,2,4,5,7,6,8,9,11,10], [0,1,3,2,8,9,11,10,4,5,7,6]]
+DEFAULT_DTS_LANE_MAPS = [[0,1,3,7,6,8,2,4,5,9,11,10], [4,5,7,3,2,8,6,0,1,9,11,10]]
 NTIME_PACKET = 32
 FPGA_CLOCKS_PER_SPECTRA = 256
 
@@ -1404,6 +1404,7 @@ class CosmicFengine():
         phase and phase_rate values to upload to the F-Engine. When delay_track is cleared, this function will continuously 
         load the calibration delays to the F-Engine.
         """
+        #Initialisation:
         try:
             delay_calib = np.fromiter(json.loads(self.redis_obj.hget
                                 ("META_calibrationDelays", f"{self.fpga.get_connected_antname()}"
@@ -1423,14 +1424,13 @@ class CosmicFengine():
             sideband_1 = delay_coeffs["sideband_1"]
             sslo_0 = delay_coeffs["effective_lo_0_mhz"]
             sslo_1 = delay_coeffs["effective_lo_1_mhz"]
+            coeff_time_value = delay_coeffs["time_value"]
             fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                                           #fshift in Hz
 
         except:
             self.logger.error("""Unable to load calibration or geometric delays from 
             'META_calibrationDelays' and 'META_modelDelays', aborting thread...""")
             return
-
-        zeros = np.zeros(self.phaserotate.n_streams)
 
         #check that telescope time is correct:
         if not self.check_delay_time(tolerance= 1e-1):
@@ -1440,7 +1440,7 @@ class CosmicFengine():
         #Open the outer while loop for the redis channel listener:
         while self.delay_tracking_switch.is_set():
             #Fetch message from subscribed channels
-            message = self.redis_pubsub.get_message(timeout=0.01)
+            message = self.redis_pubsub.get_message(timeout=0.1)
 
             if message and "message" == message["type"]:
                 try:
@@ -1449,11 +1449,11 @@ class CosmicFengine():
                     self.logger.error(f"Unable to json parse the triggered channel data. Continuing...")
                     continue
                 if self.delay_channel_names[0] == message['channel']:
-                    #This is a delay value
+                    #This is a set of geometric delay coefficients
                     delay_coeffs = message_data
 
                 if self.delay_channel_names[1] == message['channel']:
-                    #Need to update delay calibration values
+                    #Alert to update delay calibration values
                     if message_data:
                         try:
                             delay_calib = np.fromiter(json.loads(self.redis_obj.hget
@@ -1465,7 +1465,7 @@ class CosmicFengine():
                             continue
 
                 if self.delay_channel_names[2] == message['channel']:
-                    #Need to update phase calibration values
+                    #Alert to update phase calibration values
                     if message_data:
                         try:
                             phase_calib = np.array(json.loads(self.redis_obj.hget
@@ -1478,21 +1478,19 @@ class CosmicFengine():
                             continue
 
             else:
-                #No values received, load values on hand
+                #No messages received, load values on hand
                 t = time.time() * 1e6 # received loadtime is in microseconds so compare against time now in microseconds
-
-                if (delay_coeffs['loadtime_us'] < (t + 1e5)
+                if (delay_coeffs['loadtime_us'] < (t + 10e5)
                     or 
-                    delay_coeffs['loadtime_us'] > (t + 1e6)):
-                    #if the provided loadtime is not at least 1e-1s into the future or more than 1s into the future
-                    required_loadtime_us = t + 1e6 # interpolate one second into the future on the old delay coefficients
-                    required_loadtime_s = required_loadtime_us * 1e-6
+                    delay_coeffs['loadtime_us'] > (t + 20e5)):
+                    #if the provided loadtime is not at least 1s into the future or more than 2s into the future
+                    #interpolate half a second into the future on the old delay coefficients
+                    required_loadtime_us = t + 5e5 
                 else:
+                    #the provided loadtime is within the window 1s -> 2s, update delay coefficients
                     self.logger.debug("Delay coefficients received have a target loadtime within range. Updating delay coefficients...")
-                    #if the provided loadtime is in the future but within 1 second 
-                    required_loadtime_us = int(delay_coeffs['loadtime_us'])
-                    required_loadtime_s = required_loadtime_us * 1e-6
                     #update values
+                    required_loadtime_us = int(delay_coeffs['loadtime_us'])
                     delay_ns = delay_coeffs["delay_ns"]
                     delay_rate_nsps = delay_coeffs["delay_rate_nsps"]
                     delay_raterate_nsps2 = delay_coeffs["delay_raterate_nsps2"]
@@ -1500,14 +1498,15 @@ class CosmicFengine():
                     sideband_1 = delay_coeffs["sideband_1"]
                     sslo_0 = delay_coeffs["effective_lo_0_mhz"]
                     sslo_1 = delay_coeffs["effective_lo_1_mhz"]
+                    coeff_time_value = delay_coeffs["time_value"]
                     fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                           #fshift in Hz
 
+                required_loadtime_s = required_loadtime_us * 1e-6
                 required_loadtime_fpga_clks = int((required_loadtime_us * FPGA_CLOCK_RATE_HZ) // 1000000) #should give us fpga_clks in microsecond precision
 
                 if self.delay_track.is_set():
                     #interpolate to the required loadtime, given the time at which the coefficients were calculated
-                    loadtime_diff_modeltime = (required_loadtime_s - delay_coeffs["time_value"])
-
+                    loadtime_diff_modeltime = (required_loadtime_s - coeff_time_value) #value in seconds
                     # T = 1/2*ax^2 + bx + c + delay_calibrations
                     delay_to_load = (np.array([0.5*delay_raterate_nsps2*(loadtime_diff_modeltime**2) + 
                                         delay_rate_nsps*loadtime_diff_modeltime + 
@@ -1544,10 +1543,10 @@ class CosmicFengine():
                 else:
                     #Zero array
                     delay_to_load = delay_calib
-                    delay_rate_to_load = zeros
-                    phase_to_load = zeros
-                    phase_rate_to_load = zeros
-                    phase_correction_factor = zeros
+                    delay_rate_to_load = np.zeros(self.phaserotate.n_streams)
+                    phase_to_load = np.zeros(self.phaserotate.n_streams)
+                    phase_rate_to_load = np.zeros(self.phaserotate.n_streams)
+                    phase_correction_factor = np.zeros(self.phaserotate.n_streams)
 
                 #Load delays:
                 self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, phase_correction_factor,
@@ -1574,7 +1573,7 @@ class CosmicFengine():
                     assert (feng_time_to_load > 0, f"F-Engine time to load is not positive = {feng_time_to_load}. This means the load will likely be unsuccessful.")
                     time.sleep(expected_sleep_duration)  
                     feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
-                    assert (np.isclose(feng_time_to_load, 0.0, atol=1e-4),
+                    assert (np.isclose(feng_time_to_load, 0.0, atol=1e-3),
                             f"After sleeping, time to load from the F-Engine {feng_time_to_load}s is not near zero.")
                 except ValueError:
                     self.logger.warn(f"""Tried to sleep for negative time.""")
