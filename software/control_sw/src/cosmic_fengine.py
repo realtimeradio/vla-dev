@@ -1011,8 +1011,8 @@ class CosmicFengine():
                 self.logger.error(f"Error encountered in settting delays and phases: {err}")
                 return
 
-    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, loadtime,
-                            clock_rate_hz=2048000000, invert_band = False):
+    def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, loadtime, fshifts,
+                            sslo, sideband, clock_rate_hz=2048000000, invert_band = False):
         """
         From the delay and delay rate values for this fengine instance, calculate an expected delay
         slope value for a given time. 
@@ -1032,6 +1032,12 @@ class CosmicFengine():
         :type phase_rate_to_load: ndarray{float}
         :param loadtime: The time in seconds at which the delays were loaded.
         :type loadtime: float
+        :param fshifts: The fshift values in use from the delay model in Hz
+        :type fshifts: ndarray{float}
+        :param sslo: The sslo values in use from the delay model in mhz
+        :type sslo: list
+        :param sideband: The sideband values in use from the delay model
+        :type sideband: list
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
@@ -1042,6 +1048,7 @@ class CosmicFengine():
         #initialisation:
         firm_delay = np.zeros(self.delay.n_streams, dtype=float)
         firm_phase = np.zeros(self.delay.n_streams, dtype=float)
+        firm_fshift = np.zeros(self.delay.n_streams, dtype=float)
 
         #here we can be sure the time is in the past (negative)
         time_since_load = -1.0 * self.phaserotate.get_time_to_load() / FPGA_CLOCK_RATE_HZ # fpga_clks -> s
@@ -1054,6 +1061,8 @@ class CosmicFengine():
             firm_phase[stream] = (phase/phase_scale)
             firm_int_delay = self.delay.get_delay(stream)
             firm_delay[stream] = (firm_int_delay + firm_frac_delay) / (1e-9 * clock_rate_hz)
+
+            firm_fshift[stream] = self.lo.get_lo_frequency_shift(stream, return_in_hz = True)
             
         exp_delay = (delay_to_load + (delay_rate_to_load * time_since_load))
         exp_phase = ((phase_to_load + (phase_rate_to_load * time_since_load)) /np.pi + 1)%2 - 1
@@ -1064,14 +1073,19 @@ class CosmicFengine():
                 f"{self.fpga.get_connected_antname()}",
                 json.dumps({
                     "expected_delay_ns" : np.round(exp_delay,decimals=4).tolist(),
-                    "expected_phase_rad" : np.round(exp_phase,decimals=4).tolist(),
                     "firmware_delay_ns" : np.round(firm_delay,decimals=4).tolist(),
-                    "firmware_phase_rad" : np.round(firm_phase,decimals=4).tolist(),
                     "delay_correct"  : np.isclose(exp_delay,firm_delay,atol=1e-3).tolist(),
+                    "firmware_phase_rad" : np.round(firm_phase,decimals=4).tolist(),
+                    "expected_phase_rad" : np.round(exp_phase,decimals=4).tolist(),
                     "phase_correct"  : np.isclose(exp_phase,firm_phase,atol=1e-3).tolist(),
                     "time_since_load_sec" : round(time_since_load,8),
                     "delays_loaded_at" : loadtime,
-                    "loadtime_accurate" : bool(np.isclose((time.time() - time_since_load),loadtime,atol=1e-6))
+                    "loadtime_accurate" : bool(np.isclose((time.time() - time_since_load),loadtime,atol=1e-6)),
+                    "current_fshift_hz" : fshifts.tolist(),
+                    "loaded_fshift_hz" : firm_fshift.tolist(),
+                    "fshifts_match" : np.isclose(fshifts,firm_fshift,atol=1e-5).tolist(),
+                    "current_sslo": sslo,
+                    "current_sideband": sideband
                     })
                 )
         except:
@@ -1581,8 +1595,8 @@ class CosmicFengine():
                         self.logger.error(f"Aborting thread.")
                         return
                     continue
-                self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, required_loadtime_s,
-                                        clock_rate_hz=2048000000, invert_band = False)
+                self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, required_loadtime_s, fshifts,
+                                        [sslo_0, sslo_1], [sideband_0, sideband_1], clock_rate_hz=2048000000, invert_band = False)
     
         self.logger.info("Delay switch is cleared, returning.")
 
