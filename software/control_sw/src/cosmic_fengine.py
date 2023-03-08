@@ -1615,6 +1615,7 @@ class CosmicFengine():
             self.delay_halfcal.clear()
             self.delay_halfphase.clear()
             self.delay_halfphasecorrection.clear()
+            self.delay_fullphasecorrection.clear()
             self.delay_track.set()
             self.start_delay_tracking()
             return
@@ -1676,6 +1677,31 @@ class CosmicFengine():
         self.delay_halfoff.clear()
         self.delay_halfcal.clear()
 
+    def get_delay_tracking_mode(self):
+        """
+        Fetches internal delay tracking mode.
+
+        Returns:
+            delay_mode: str: string indicating current delay tracking mode
+        """
+        if self.delay_tracking_switch.is_set():
+            if self.delay_track.is_set():
+                if self.delay_halfoff.is_set():
+                    return "half-off"
+                elif self.delay_halfcal.is_set():
+                    return "half-cal"
+                elif self.delay_halfphase.is_set():
+                    return "half-phase"
+                elif self.delay_halfphasecorrection.is_set():
+                    return "half-corrected-phase"
+                elif self.delay_fullphasecorrection.is_set():
+                    return "full-corrected-phase"
+                else:
+                    return "true"
+            else:
+                return "fixed-only"
+        else:
+            return "false"
 
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, sideband, fshifts,
