@@ -717,10 +717,6 @@ class CosmicFengine():
         else:
             self.logger.info('Disabling EQ TVGs...')
             self.eqtvg.tvg_disable()
-        
-        #first, load lo_offshifts, assuming those received are in hz:
-        if lo_fshift_list is not None:
-            self.set_lo_fshift_list(lo_fshift_list)
             
         if sync:
             self.logger.info("Arming sync generators")
@@ -733,6 +729,10 @@ class CosmicFengine():
                 self._enforce_valid_tt_armed(rearm_noise=True)
         else:
             self.logger.warn("Absence of sync means lo offshifts will not load...")
+        
+        #first, load lo_offshifts, assuming those received are in hz:
+        if lo_fshift_list is not None:
+            self.set_lo_fshift_list(lo_fshift_list)
 
         for sn, source_ip in enumerate(source_ips):
             if sn >= self.neths:
