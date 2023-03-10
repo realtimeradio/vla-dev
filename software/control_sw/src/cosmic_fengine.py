@@ -905,6 +905,9 @@ class CosmicFengine():
             self.lo.set_target_load_time(int(lo_load_time * FPGA_CLOCK_RATE_HZ), enable_trig=True)
             self.logger.info(f"F-Shift load time set to {time.ctime(lo_load_time)}")
             time.sleep(lo_load_time - (time.time()))
+            fshift_time_to_load = self.lo.get_time_to_load()/FPGA_CLOCK_RATE_HZ
+            assert (np.isclose(fshift_time_to_load, 0.0, atol=1e-3),
+                    f"After sleeping, time to load from the F-Engine {fshift_time_to_load}s is not near zero.")
         else:
             raise RuntimeError("Cannot set F-shift load time for time in the past.")
 
