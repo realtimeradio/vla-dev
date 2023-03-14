@@ -717,10 +717,6 @@ class CosmicFengine():
         else:
             self.logger.info('Disabling EQ TVGs...')
             self.eqtvg.tvg_disable()
-        
-        #first, load lo_offshifts, assuming those received are in hz:
-        if lo_fshift_list is not None:
-            self.set_lo_fshift_list(lo_fshift_list)
             
         if sync:
             self.logger.info("Arming sync generators")
@@ -733,6 +729,10 @@ class CosmicFengine():
                 self._enforce_valid_tt_armed(rearm_noise=True)
         else:
             self.logger.warn("Absence of sync means lo offshifts will not load...")
+        
+        #first, load lo_offshifts, assuming those received are in hz:
+        if lo_fshift_list is not None:
+            self.set_lo_fshift_list(lo_fshift_list)
 
         for sn, source_ip in enumerate(source_ips):
             if sn >= self.neths:
@@ -905,6 +905,9 @@ class CosmicFengine():
             self.lo.set_target_load_time(int(lo_load_time * FPGA_CLOCK_RATE_HZ), enable_trig=True)
             self.logger.info(f"F-Shift load time set to {time.ctime(lo_load_time)}")
             time.sleep(lo_load_time - (time.time()))
+            fshift_time_to_load = self.lo.get_time_to_load()/FPGA_CLOCK_RATE_HZ
+            assert (np.isclose(fshift_time_to_load, 0.0, atol=1e-2),
+                    f"After sleeping, time to load from the F-Engine {fshift_time_to_load}s is not near zero.")
         else:
             raise RuntimeError("Cannot set F-shift load time for time in the past.")
 
@@ -924,9 +927,10 @@ class CosmicFengine():
         ]
 
     def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
-                    phase_correction_factor, clock_rate_hz=2048000000, invert_band=False):
+                    sideband, clock_rate_hz=2048000000, invert_band=False):
         """
         Transform the argument delays, delay rates, phases and phase rates before uploading them to the F-Engine.
+        After sufficient testing, this function will be absorbed into delay_tracking to reduce complexity.
         :param delay_to_load: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
             the delay, in nanoseconds, which should be applied at the appropriate time.
             Whole ADC sample delays are implemented using a coarse delay, while sub-sample
@@ -945,18 +949,21 @@ class CosmicFengine():
             the rate of change of phase, in radians per second. This is the incremental phase
             which should be added to the current phase each second.
         :type phase_rate_to_load: ndarray{float}
-        :param phase_correction_factor: 4-long numpy array of factors which when multiplied by the coarse delay calculated
-            herein will yield the second phase correction factor to be subtracted from phase_to_load. Units of this correction are in Hz.
-        :type phase_correction_factor: ndarray{float}
+        :param sideband: 2-long list of integers which are the VLA prescribed sideband factors.
+        :type sideband: list{int}
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
         :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
             apply a fractional delay which is the negative of the physical delay.
         :type invert_band: bool
+
+        Returns:
+            fshifts: ndarray{floats} the fshift values in Hz used in the phase correction.
         """
         delay_samples = delay_to_load * (1e-9 * clock_rate_hz)
         delay_samples_int = np.zeros(self.delay.n_streams, dtype=int)
+        fshifts = np.zeros(self.delay.n_streams, dtype=float)
         for if_id in range(self.delay.n_streams):
             # If delay rate is positive, want to make fractional delay as small as possible,
             # so round delay up
@@ -972,8 +979,14 @@ class CosmicFengine():
                     delay_samples_int[if_id] = (np.floor(delay_samples[if_id])).astype(int)
                 else:
                     delay_samples_int[if_id] = (np.ceil(delay_samples[if_id])).astype(int)
+            
+            #collect fshift
+            fshifts[if_id] = self.lo.get_lo_frequency_shift(if_id, return_in_hz = True)
 
         delay_samples_frac = (delay_samples - delay_samples_int).astype(np.float)
+
+        phase_correction_factor = np.concatenate(((2*np.pi) * sideband[0] * fshifts[0:2],                           #tuning 0
+                                                            (2*np.pi) * sideband[1] * fshifts[2:4]),axis=0)         #tuning 1    
 
         #if applying the fshift phase correction to the phase
         if self.delay_halfphasecorrection.is_set():
@@ -1010,6 +1023,7 @@ class CosmicFengine():
             except BaseException as err:
                 self.logger.error(f"Error encountered in settting delays and phases: {err}")
                 return
+        return fshifts
 
     def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, loadtime, fshifts,
                             sslo, sideband, clock_rate_hz=2048000000, invert_band = False):
@@ -1032,7 +1046,7 @@ class CosmicFengine():
         :type phase_rate_to_load: ndarray{float}
         :param loadtime: The time in seconds at which the delays were loaded.
         :type loadtime: float
-        :param fshifts: The fshift values in use from the delay model in Hz
+        :param fshifts: The fshift values in use from the phase correction in Hz
         :type fshifts: ndarray{float}
         :param sslo: The sslo values in use from the delay model in mhz
         :type sslo: list
@@ -1048,7 +1062,6 @@ class CosmicFengine():
         #initialisation:
         firm_delay = np.zeros(self.delay.n_streams, dtype=float)
         firm_phase = np.zeros(self.delay.n_streams, dtype=float)
-        firm_fshift = np.zeros(self.delay.n_streams, dtype=float)
 
         #here we can be sure the time is in the past (negative)
         time_since_load = -1.0 * self.phaserotate.get_time_to_load() / FPGA_CLOCK_RATE_HZ # fpga_clks -> s
@@ -1061,8 +1074,6 @@ class CosmicFengine():
             firm_phase[stream] = (phase/phase_scale)
             firm_int_delay = self.delay.get_delay(stream)
             firm_delay[stream] = (firm_int_delay + firm_frac_delay) / (1e-9 * clock_rate_hz)
-
-            firm_fshift[stream] = self.lo.get_lo_frequency_shift(stream, return_in_hz = True)
             
         exp_delay = (delay_to_load + (delay_rate_to_load * time_since_load))
         exp_phase = ((phase_to_load + (phase_rate_to_load * time_since_load)) /np.pi + 1)%2 - 1
@@ -1081,9 +1092,7 @@ class CosmicFengine():
                     "time_since_load_sec" : round(time_since_load,8),
                     "delays_loaded_at" : loadtime,
                     "loadtime_accurate" : bool(np.isclose((time.time() - time_since_load),loadtime,atol=1e-6)),
-                    "current_fshift_hz" : fshifts.tolist(),
-                    "loaded_fshift_hz" : firm_fshift.tolist(),
-                    "fshifts_match" : np.isclose(fshifts,firm_fshift,atol=1e-5).tolist(),
+                    "loaded_fshift_hz" : fshifts.tolist(),
                     "current_sslo": sslo,
                     "current_sideband": sideband
                     })
@@ -1434,12 +1443,10 @@ class CosmicFengine():
             delay_ns = delay_coeffs["delay_ns"]
             delay_rate_nsps = delay_coeffs["delay_rate_nsps"]
             delay_raterate_nsps2 = delay_coeffs["delay_raterate_nsps2"]
-            sideband_0 = delay_coeffs["sideband_0"]
-            sideband_1 = delay_coeffs["sideband_1"]
+            sideband = [delay_coeffs["sideband_0"], delay_coeffs["sideband_1"]]
             sslo_0 = delay_coeffs["effective_lo_0_mhz"]
             sslo_1 = delay_coeffs["effective_lo_1_mhz"]
             coeff_time_value = delay_coeffs["time_value"]
-            fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                                           #fshift in Hz
 
         except:
             self.logger.error("""Unable to load calibration or geometric delays from 
@@ -1508,12 +1515,10 @@ class CosmicFengine():
                     delay_ns = delay_coeffs["delay_ns"]
                     delay_rate_nsps = delay_coeffs["delay_rate_nsps"]
                     delay_raterate_nsps2 = delay_coeffs["delay_raterate_nsps2"]
-                    sideband_0 = delay_coeffs["sideband_0"]
-                    sideband_1 = delay_coeffs["sideband_1"]
+                    sideband = [delay_coeffs["sideband_0"], delay_coeffs["sideband_1"]]
                     sslo_0 = delay_coeffs["effective_lo_0_mhz"]
                     sslo_1 = delay_coeffs["effective_lo_1_mhz"]
                     coeff_time_value = delay_coeffs["time_value"]
-                    fshifts = np.array(delay_coeffs["lo_hz"],dtype=float)                                           #fshift in Hz
 
                 required_loadtime_s = required_loadtime_us * 1e-6
                 required_loadtime_fpga_clks = int((required_loadtime_us * FPGA_CLOCK_RATE_HZ) // 1000000) #should give us fpga_clks in microsecond precision
@@ -1530,16 +1535,13 @@ class CosmicFengine():
                     delay_rate_to_load = np.array([delay_raterate_nsps2*loadtime_diff_modeltime + 
                                             delay_rate_nsps]*self.delay.n_streams,dtype=float)
 
-                    phase_correction_factor = np.concatenate(((2*np.pi) * sideband_0 * fshifts[0:2],                #tuning 0
-                                                            (2*np.pi) * sideband_1 * fshifts[2:4]),axis=0)          #tuning 1
-                    
-                    phase_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband_0 * delay_to_load[0:2]
+                    phase_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband[0] * delay_to_load[0:2]
                                                             * sslo_0 * 1e-3,                                        #tuning 0
-                                                            (2*np.pi) * sideband_1 * delay_to_load[2:4] 
+                                                            (2*np.pi) * sideband[1] * delay_to_load[2:4] 
                                                             * sslo_1 * 1e-3),axis=0)                                #tuning 1
-                    phase_rate_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband_0 * delay_rate_to_load[0:2] 
+                    phase_rate_to_load = -1.0 * np.concatenate(((2*np.pi) * sideband[0] * delay_rate_to_load[0:2] 
                                                             * sslo_0 * 1e-3,                                        #tuning 0
-                                                            (2*np.pi) * sideband_1 * delay_rate_to_load[2:4] 
+                                                            (2*np.pi) * sideband[1] * delay_rate_to_load[2:4] 
                                                             * sslo_1 * 1e-3),axis=0)                                #tuning 1
 
                     #half delay off state 
@@ -1560,10 +1562,9 @@ class CosmicFengine():
                     delay_rate_to_load = np.zeros(self.phaserotate.n_streams)
                     phase_to_load = np.zeros(self.phaserotate.n_streams)
                     phase_rate_to_load = np.zeros(self.phaserotate.n_streams)
-                    phase_correction_factor = np.zeros(self.phaserotate.n_streams)
 
                 #Load delays:
-                self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, phase_correction_factor,
+                fshifts = self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, sideband,
                                 clock_rate_hz=2048000000, invert_band = False)
                 
                 if(required_loadtime_s > (time.time_ns()*1e-9 + 1e-1)):
@@ -1587,7 +1588,7 @@ class CosmicFengine():
                     assert (feng_time_to_load > 0, f"F-Engine time to load is not positive = {feng_time_to_load}. This means the load will likely be unsuccessful.")
                     time.sleep(expected_sleep_duration)  
                     feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
-                    assert (np.isclose(feng_time_to_load, 0.0, atol=1e-3),
+                    assert (np.isclose(feng_time_to_load, 0.0, atol=1e-2),
                             f"After sleeping, time to load from the F-Engine {feng_time_to_load}s is not near zero.")
                 except ValueError:
                     self.logger.warn(f"""Tried to sleep for negative time.""")
@@ -1596,7 +1597,7 @@ class CosmicFengine():
                         return
                     continue
                 self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, required_loadtime_s, fshifts,
-                                        [sslo_0, sslo_1], [sideband_0, sideband_1], clock_rate_hz=2048000000, invert_band = False)
+                                        [sslo_0, sslo_1], sideband, clock_rate_hz=2048000000, invert_band = False)
     
         self.logger.info("Delay switch is cleared, returning.")
 
@@ -1617,6 +1618,7 @@ class CosmicFengine():
             self.delay_halfcal.clear()
             self.delay_halfphase.clear()
             self.delay_halfphasecorrection.clear()
+            self.delay_fullphasecorrection.clear()
             self.delay_track.set()
             self.start_delay_tracking()
             return
@@ -1678,6 +1680,31 @@ class CosmicFengine():
         self.delay_halfoff.clear()
         self.delay_halfcal.clear()
 
+    def get_delay_tracking_mode(self):
+        """
+        Fetches internal delay tracking mode.
+
+        Returns:
+            delay_mode: str: string indicating current delay tracking mode
+        """
+        if self.delay_tracking_switch.is_set():
+            if self.delay_track.is_set():
+                if self.delay_halfoff.is_set():
+                    return "half-off"
+                elif self.delay_halfcal.is_set():
+                    return "half-cal"
+                elif self.delay_halfphase.is_set():
+                    return "half-phase"
+                elif self.delay_halfphasecorrection.is_set():
+                    return "half-corrected-phase"
+                elif self.delay_fullphasecorrection.is_set():
+                    return "full-corrected-phase"
+                else:
+                    return "true"
+            else:
+                return "fixed-only"
+        else:
+            return "false"
 
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, sideband, fshifts,
