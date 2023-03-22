@@ -1878,10 +1878,12 @@ class CosmicFengine():
             
             if header['first']:
                 ip = header['dest_ip']
+                port = header['dest_port']
                 feng_id = header['feng_id']
             
             if (len(packet_dest_ips) > 0 and
                 (packet_dest_ips[-1]['dest'] == ip
+                    and packet_dest_ips[-1]['dest_port'] == port
                     and packet_dest_ips[-1]['feng_id'] == feng_id
                 )
             ):
@@ -1892,6 +1894,7 @@ class CosmicFengine():
             else:
                 packet_dest_ips.append({
                     'dest':ip,
+                    'dest_port':port,
                     'feng_id':feng_id,
                     'start_chan':header['chans'],
                     'end_chan':header['chans'],
