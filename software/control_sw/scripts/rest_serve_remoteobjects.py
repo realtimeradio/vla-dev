@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from flask import Flask
+import logging
 from flask_restful import Resource
 from casperfpga import LocalPcieTransport
 from remoteobjects.server import addRemoteObjectResources
@@ -90,6 +91,7 @@ if __name__ == '__main__':
             object_id = f'{pcie_id_string}_{pipeline_id}'
             object_registry.obj_set_id(obj_id, object_id)
             feng = object_registry.get_registered_object(object_id)
+            feng.logger.setLevel(logging.DEBUG)
             print(f'Registered CosmicFengine `{object_id}`...')
             if pipeline_id == 0 and args.program:
                 feng._cfpga.upload_to_ram_and_program(args.fpgfile)
