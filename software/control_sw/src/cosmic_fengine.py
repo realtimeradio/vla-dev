@@ -1855,6 +1855,33 @@ class CosmicFengine():
 
             rearm_limit -= 1
 
+    def update_packet_header_destination_ports(self, ipport_map):
+        '''
+        Iterates through the packet headers of all packetizers,
+        updating the destination port value of any headers that have
+        an IP value in the given map.
+
+        :param ipport_map: dotted-quad string IP adress keyed integer ports
+        :type ipport_map: dict
+
+        :return: a list of booleans indicating if the corresponding
+            packetizer had its headers re-populated
+        :rtype: list
+        '''
+        changes_made = []
+        for packetizer in self.packetizers:
+            headers = packetizer._read_headers()
+            changes_made.append(False)
+            for header in headers:
+                if header['dest_ip'] in ipport_map:
+                    header['dest_port'] = ipport_map[header['dest_ip']]
+                    changes_made[-1] = True
+
+            if changes_made[-1]:
+                packetizer._populate_headers(headers)
+            
+        return changes_made
+
     def read_chan_dest_ips_as_json(self, portnum):
         '''
         Reads the headers of the packetizer block and constructs a summative
