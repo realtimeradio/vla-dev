@@ -1876,6 +1876,7 @@ class CosmicFengine():
                 if header['dest_ip'] in ipport_map:
                     header['dest_port'] = ipport_map[header['dest_ip']]
                     changes_made[-1] = True
+                header['chan'] = header['chans']
 
             if changes_made[-1]:
                 packetizer._populate_headers(headers)
