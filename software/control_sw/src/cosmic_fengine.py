@@ -1010,10 +1010,10 @@ class CosmicFengine():
         self.phaserotate.disable_load() # Disable load during configuration for phaserotate
         
         # Invert slope of post-fft delay if necessary
-        delay_samples_frac[0:1] = sideband[0] * delay_samples_frac[0:1]
-        delay_rates_samples_per_spec[0:1] = sideband[0] * delay_rates_samples_per_spec[0:1]
-        delay_samples_frac[2:3] = sideband[1] * delay_samples_frac[2:3]
-        delay_rates_samples_per_spec[2:3] = sideband[1] * delay_rates_samples_per_spec[2:3]
+        delay_samples_frac[0:2] *= sideband[0]
+        delay_rates_samples_per_spec[0:2] *= sideband[0]
+        delay_samples_frac[2:4] *= sideband[1]
+        delay_rates_samples_per_spec[2:4] *= sideband[1]
 
         for i in range(self.delay.n_streams):
             try:
@@ -1073,8 +1073,8 @@ class CosmicFengine():
             slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
             firm_frac_delay = slope/slope_scale
             # interpret slope gradient direction dependent on sideband
-            firm_frac_delay[0:1] *= sideband[0]
-            firm_frac_delay[2:3] *= sideband[1]
+            firm_frac_delay[0:2] *= sideband[0]
+            firm_frac_delay[2:4] *= sideband[1]
             phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
             firm_phase[stream] = (phase/phase_scale)
             firm_int_delay = self.delay.get_delay(stream)
