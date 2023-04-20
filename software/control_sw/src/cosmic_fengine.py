@@ -927,7 +927,7 @@ class CosmicFengine():
         ]
 
     def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
-                    sideband, clock_rate_hz=2048000000):
+                    sideband, clock_rate_hz=2048000000, invert_band=False):
         """
         Transform the argument delays, delay rates, phases and phase rates before uploading them to the F-Engine.
         After sufficient testing, this function will be absorbed into delay_tracking to reduce complexity.
@@ -954,6 +954,9 @@ class CosmicFengine():
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
+        :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
+            apply a fractional delay which is the negative of the physical delay.
+        :type invert_band: bool
 
         Returns:
             fshifts: ndarray{floats} the fshift values in Hz used in the phase correction.
@@ -1006,11 +1009,9 @@ class CosmicFengine():
         self.delay.disable_load() # Disable load during configuration for delay
         self.phaserotate.disable_load() # Disable load during configuration for phaserotate
         
-        # Invert slope of post-fft delay if necessary
-        delay_samples_frac[0:2] *= sideband[0]
-        delay_rates_samples_per_spec[0:2] *= sideband[0]
-        delay_samples_frac[2:4] *= sideband[1]
-        delay_rates_samples_per_spec[2:4] *= sideband[1]
+        if invert_band:
+            delay_samples_frac = -1.0 * delay_samples_frac
+            delay_rates_samples_per_spec = -1.0 * delay_rates_samples_per_spec
 
         for i in range(self.delay.n_streams):
             try:
@@ -1025,7 +1026,7 @@ class CosmicFengine():
         return fshifts
 
     def check_delay_tracking(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, loadtime, fshifts,
-                            sslo, sideband, clock_rate_hz=2048000000):
+                            sslo, sideband, clock_rate_hz=2048000000, invert_band = False):
         """
         From the delay and delay rate values for this fengine instance, calculate an expected delay
         slope value for a given time. 
@@ -1054,6 +1055,9 @@ class CosmicFengine():
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
+        :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
+            apply a fractional delay which is the negative of the physical delay.
+        :type invert_band: bool
         """
         #initialisation:
         firm_delay = np.zeros(self.delay.n_streams, dtype=float)
@@ -1065,12 +1069,7 @@ class CosmicFengine():
             
             #fetch the firmware reported slope and delay (samples):
             slope, slope_scale = self.phaserotate.get_firmware_slope(stream)
-            firm_frac_delay = slope/slope_scale
-            # interpret slope gradient direction dependent on sideband
-            if stream < 2:
-                firm_frac_delay *= sideband[0]
-            else:
-                firm_frac_delay *= sideband[1]
+            firm_frac_delay = slope/slope_scale if invert_band else -1.0 * slope/slope_scale
             phase, phase_scale = self.phaserotate.get_firmware_phase(stream)
             firm_phase[stream] = (phase/phase_scale)
             firm_int_delay = self.delay.get_delay(stream)
@@ -1566,7 +1565,7 @@ class CosmicFengine():
 
                 #Load delays:
                 fshifts = self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, sideband,
-                                clock_rate_hz=2048000000)
+                                clock_rate_hz=2048000000, invert_band = False)
                 
                 if(required_loadtime_s > (time.time_ns()*1e-9 + 1e-1)):
                     #give 100ms of room for the loading of the loadtime
@@ -1598,7 +1597,7 @@ class CosmicFengine():
                         return
                     continue
                 self.check_delay_tracking(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, required_loadtime_s, fshifts,
-                                        [sslo_0, sslo_1], sideband, clock_rate_hz=2048000000)
+                                        [sslo_0, sslo_1], sideband, clock_rate_hz=2048000000, invert_band = False)
     
         self.logger.info("Delay switch is cleared, returning.")
 
@@ -1709,7 +1708,7 @@ class CosmicFengine():
 
     #FOR TESTING ONLY
     def set_delay_tracking(self, delays, delay_rates, phases, phase_rates, sideband, fshifts,
-                             load_time=None, clock_rate_hz=2048000000):
+                             load_time=None, clock_rate_hz=2048000000, invert_band=False):
         """
         Set the delays for this F-Engine once. If no load_time is provided, delays are uploaded to the
         F-Engine immediately.
@@ -1741,6 +1740,9 @@ class CosmicFengine():
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
+        :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
+            apply a fractional delay which is the negative of the physical delay.
+        :type invert_band: bool
         """
         force_delay_load = False
         if load_time is None:
@@ -1756,7 +1758,7 @@ class CosmicFengine():
         phase_to_load = np.array(phases,dtype=float)
         phase_rate_to_load = np.array(phase_rates,dtype=float)
         self.set_delays(delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load, 
-                        phase_correction_factor, clock_rate_hz)
+                        phase_correction_factor, clock_rate_hz, invert_band)
        
         #Handle the loading time/force loading of the delays
         if force_delay_load:
