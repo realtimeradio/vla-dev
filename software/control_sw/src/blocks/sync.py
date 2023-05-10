@@ -229,12 +229,22 @@ class Sync(Block):
             if verbose:
                 self._error("No sync detected in %.3f seconds" % wait_time)
         ### TT test
+        n_retry=3
         offset_ok = True
         # Don't bother with the test if there are no syncs, it'll only time out
         if not sync_ok:
             offset_ok = False
         else:
-            offset_s = self.get_tt_ntp_offset()
+            for i in range(n_retry):
+                # Catch occasional issues where reading the TT
+                # takes too long and is interrupted by a sync arrival
+                try:
+                    offset_s = self.get_tt_ntp_offset()
+                    break
+                except RuntimeError:
+                    continue
+                # On last retry throw the error
+                raise RuntimeError
             if abs(offset_s) > 0.05:
                 offset_ok = False
                 if verbose:
