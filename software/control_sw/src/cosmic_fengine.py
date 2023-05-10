@@ -618,7 +618,7 @@ class CosmicFengine():
                    chans_per_packet=32, ninput=NIFS,
                    macs={}, source_ips=['10.41.0.101'], source_port=10000,
                    dests=[], dts_lane_map=None, fpgfile=None, sync_offset_ns=0.0,
-                   lo_fshift_list = None):
+                   lo_fshift_list = None, target_rms=0.125):
         """
         Completely configure an F-engine from scratch.
 
@@ -696,6 +696,10 @@ class CosmicFengine():
 
         :param lo_fshift_list: If not None, a list of lo_fshifts in Hz to apply in order of streams.
         :type lo_fshift_list: List
+
+        :param target_rms: If not None, equalize the F-Engine streams to the target_rms provided
+            using `self.set_equalization`.
+        :type target_rms: {float, None}
         """
         
         self.logger.info('Disabling TX')
@@ -734,6 +738,9 @@ class CosmicFengine():
         #first, load lo_offshifts, assuming those received are in hz:
         if lo_fshift_list is not None:
             self.set_lo_fshift_list(lo_fshift_list)
+
+        if target_rms is not None:
+            self.set_equalization(eq_start_chan=511, eq_stop_chan=511, start_chan=0,stop_chan=1023, filter_ksize=127, target_rms=target_rms)
 
         for sn, source_ip in enumerate(source_ips):
             if sn >= self.neths:
