@@ -86,6 +86,7 @@ class CosmicFengine():
         self.pipeline_id = pipeline_id
         self.fpgfile = fpgfile
         self.neths = neths
+        #: A list of bools describing the user enablement of Ethernet cores.
         self.eth_tx = [None for i in range(neths)]
         #: Python Logger instance
         self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(__name__ + ":%s" % (host)))
@@ -1230,7 +1231,7 @@ class CosmicFengine():
                         self.redis_obj.publish(rc, f"DTS monitor @ {antname}: {message}")
 
                     if consecutive_bad_count == consecutive_bad_limit:
-                        message = f"Disabling ethernet: {self.eth_tx}."
+                        message = f"Disabling ethernet: [User commanded state is {self.eth_tx}]."
                         self.logger.warning(message)
                         disabled = True
                         self.dts_mon_tx_disable.set()
@@ -1249,7 +1250,7 @@ class CosmicFengine():
                         self.redis_obj.publish(rc, f"DTS monitor @ {antname}: {message}")
                     
                     if consecutive_bad_count == 0:
-                        message = f"Enabling ethernet: {self.eth_tx}."
+                        message = f"Enabling ethernet: [User commanded state is {self.eth_tx}]."
                         self.logger.warning(message)
                         disabled = False
                         self.dts_mon_tx_disable.clear()
@@ -1775,7 +1776,14 @@ class CosmicFengine():
 
     def enable_tx(self, enable_state=None):
         """
-        Optional enable_state is a list mask of bool for each eth.
+        Enable Ethernet cores, as long as the DTS monitor hasn't disabled them.
+        Internally, set the ``eth_tx`` attribute, so that even if the DTS monitor
+        _has_ disabled network egress, it is clear that the user requested it be
+        enabled.
+
+        :param enable_state: list of bools. If ``enable_state[n]``, enable
+            Ethernet core ``n``.
+        :type enable_state: list
         """
 
         if enable_state is None or not isinstance(enable_state, list):
@@ -1796,7 +1804,10 @@ class CosmicFengine():
 
     def disable_tx(self):
         """
-        Returns the tx_enabled() state before the disablement.
+        Disable Ethernet outputs.
+
+        :return: The enable-state of each of N Ethernet interfaces, as a list
+            of N bools, prior to the issuing of the disable command.
         """
         self.logger.info("Disabling Ethernet output")
         ret = []
