@@ -15,89 +15,94 @@ In both cases, the firmware channelizes the received bands into 1 MHz "coarse ch
 
 The top-level specs of the F-Engine are:
 
-+-------------------------+----------+----------------------+
-| Parameter               | Value    | Notes                |
-+=========================+==========+======================+
-| Number of antennas      | 2        |                      |
-| processed per firmware  |          |                      |
-| instance                |          |                      |
-+-------------------------+----------+----------------------+
-| Number of inputs per    | 4 (VLA   | Dual-polarization x  |
-| antenna                 | 8-bit    | 2 IFs (8-bit mode);  |
-|                         | mode); 8 | 4 IFs (3-bit mode)   |
-|                         | (VLA     |                      |
-|                         | 3-bit    |                      |
-|                         | mode)    |                      |
-+-------------------------+----------+----------------------+
-| Sampling rate           | 2.048GSa | VLA digitization     |
-|                         | /s       | standards            |
-|                         | (8-bit   |                      |
-|                         | mode);   |                      |
-|                         | 4.096    |                      |
-|                         | GSa/s    |                      |
-|                         | (3-bit   |                      |
-|                         | mode)    |                      |
-+-------------------------+----------+----------------------+
-| Test inputs             | Noise;   | Firmware contains 2  |
-|                         | zeros;   | independent gaussian |
-|                         | additive | noise generators.    |
-|                         | sine-    | Any of the input     |
-|                         | waves    | data streams may be  |
-|                         |          | replaced with any of |
-|                         |          | these digital noise  |
-|                         |          | sources, or zeros.   |
-|                         |          | User-programmable    |
-|                         |          | sine-waves may be    |
-|                         |          | added to this data   |
-|                         |          | stream               |
-+-------------------------+----------+----------------------+
-| Delay compensation      | <256k    | Programmable per-    |
-|                         | samples  | input. Maximum 256   |
-|                         | (8-bit   | useconds in all      |
-|                         | mode);   | modes (approx 38km   |
-|                         | <512k    | free-space light     |
-|                         | samples  | travel)              |
-|                         | (3-bit   |                      |
-|                         | mode)    |                      |
-+-------------------------+----------+----------------------+
-| Polyphase Filter Bank   | 1024     | 1 MHz coarse channel |
-| Channels                | (8-bit   | resolution in all    |
-|                         | mode);   | modes. FFTs are      |
-|                         | 2048     | implemented as       |
-|                         | (3-bit   | complex transforms   |
-|                         | mode)    | with twice as many   |
-|                         |          | points as channels   |
-|                         |          | output.              |
-+-------------------------+----------+----------------------+
-| Polyphase Filter Bank   | Hamming; |                      |
-| Window                  | 4-tap    |                      |
-+-------------------------+----------+----------------------+
-| Polyphase Filter Bank   | 8 bit    | Sample growth occurs |
-| Input Bitwidth          | (3-bit   | during LO offset     |
-|                         | mode);   | removal              |
-|                         | 16bit    |                      |
-|                         | (8-bit   |                      |
-|                         | mode)    |                      |
-+-------------------------+----------+----------------------+
-| FFT Coefficient Width   | 18 bits  |                      |
-+-------------------------+----------+----------------------+
-| FFT Data Path Width     | 18 bits  |                      |
-+-------------------------+----------+----------------------+
-| Post-FFT Scaling        | 20       |                      |
-| Coefficient Width       |          |                      |
-+-------------------------+----------+----------------------+
-| Post-FFT Scaling        | 8        |                      |
-| Coefficient Binary      |          |                      |
-| Point                   |          |                      |
-+-------------------------+----------+----------------------+
-| Number of Post-FFT      | 256      | Coefficients shared  |
-| Scaling Coefficients    |          | over 4 (8-bit mode)  |
-| (per input) |           |          | or 8 (3-bit mode)    |
-|                         |          | coarse channels      |
-+-------------------------+----------+----------------------+
-| Post-Quantization Data  | 8        | 8-bit real; 8-bit    |
-| Bitwidth                |          | imaginary            |
-+-------------------------+----------+----------------------+
+
+.. table::
+    :widths: 25 25 50
+
+    +-------------------------+----------+----------------------+
+    | Parameter               | Value    | Notes                |
+    +=========================+==========+======================+
+    | Number of antennas      | 2        |                      |
+    | processed per firmware  |          |                      |
+    | instance                |          |                      |
+    +-------------------------+----------+----------------------+
+    | Number of inputs per    | 4 (VLA   | Dual-polarization x  |
+    | antenna                 | 8-bit    | 2 IFs (8-bit mode);  |
+    |                         | mode); 8 | 4 IFs (3-bit mode)   |
+    |                         | (VLA     |                      |
+    |                         | 3-bit    |                      |
+    |                         | mode)    |                      |
+    +-------------------------+----------+----------------------+
+    | Sampling rate           | 2.048GSa | VLA digitization     |
+    |                         | /s       | standards            |
+    |                         | (8-bit   |                      |
+    |                         | mode);   |                      |
+    |                         | 4.096    |                      |
+    |                         | GSa/s    |                      |
+    |                         | (3-bit   |                      |
+    |                         | mode)    |                      |
+    +-------------------------+----------+----------------------+
+    | Test inputs             | Noise;   | Firmware contains 2  |
+    |                         | zeros;   | independent gaussian |
+    |                         | additive | noise generators.    |
+    |                         | sine-    | Any of the input     |
+    |                         | waves    | data streams may be  |
+    |                         |          | replaced with any of |
+    |                         |          | these digital noise  |
+    |                         |          | sources, or zeros.   |
+    |                         |          | User-programmable    |
+    |                         |          | sine-waves may be    |
+    |                         |          | added to this data   |
+    |                         |          | stream               |
+    +-------------------------+----------+----------------------+
+    | Delay compensation      | <256k    | Programmable per-    |
+    |                         | samples  | input. Maximum 256   |
+    |                         | (8-bit   | useconds in all      |
+    |                         | mode);   | modes (approx 38km   |
+    |                         | <512k    | free-space light     |
+    |                         | samples  | travel)              |
+    |                         | (3-bit   |                      |
+    |                         | mode)    |                      |
+    +-------------------------+----------+----------------------+
+    | Polyphase Filter Bank   | 1024     | 1 MHz coarse channel |
+    | Channels                | (8-bit   | resolution in all    |
+    |                         | mode);   | modes. FFTs are      |
+    |                         | 2048     | implemented as       |
+    |                         | (3-bit   | complex transforms   |
+    |                         | mode)    | with twice as many   |
+    |                         |          | points as channels   |
+    |                         |          | output.              |
+    +-------------------------+----------+----------------------+
+    | Polyphase Filter Bank   | Hamming; |                      |
+    | Window                  | 4-tap    |                      |
+    +-------------------------+----------+----------------------+
+    | Polyphase Filter Bank   | 8 bit    | Sample growth occurs |
+    | Input Bitwidth          | (3-bit   | during LO offset     |
+    |                         | mode);   | removal              |
+    |                         | 16bit    |                      |
+    |                         | (8-bit   |                      |
+    |                         | mode)    |                      |
+    +-------------------------+----------+----------------------+
+    | FFT Coefficient Width   | 18 bits  |                      |
+    +-------------------------+----------+----------------------+
+    | FFT Data Path Width     | 18 bits  |                      |
+    +-------------------------+----------+----------------------+
+    | Post-FFT Scaling        | 20       |                      |
+    | Coefficient Width       |          |                      |
+    +-------------------------+----------+----------------------+
+    | Post-FFT Scaling        | 8        |                      |
+    | Coefficient Binary      |          |                      |
+    | Point                   |          |                      |
+    +-------------------------+----------+----------------------+
+    | Number of Post-FFT      | 256      | Coefficients shared  |
+    | Scaling Coefficients    |          | over 4 (8-bit mode)  |
+    | (per input)             |          | or 8 (3-bit mode)    |
+    |                         |          | coarse channels      |
+    +-------------------------+----------+----------------------+
+    | Post-Quantization Data  | 8        | 8-bit real; 8-bit    |
+    | Bitwidth                |          | imaginary            |
+    +-------------------------+----------+----------------------+
+
 
 The Simulink block diagram of the dual-antenna F-engine firmware which runs on an ADM-PCIe-9H7 FPGA board is shown in :numref:`feng_firmware_top`.
 The block diagram showing the DSP elements of a single antenna pipeline is shown in :numref:`feng_firmware_pipeline`.

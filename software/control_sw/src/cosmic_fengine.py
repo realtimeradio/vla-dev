@@ -71,7 +71,7 @@ class CosmicFengine():
     :type logger: logging.Logger
 
     :param remote_uri: REST host address, eg. `http://192.168.32.100:5000`. This 
-    triggers the transport to be a RemotePcieTransport object.
+        triggers the transport to be a RemotePcieTransport object.
     :type remote_uri: str
 
     :param redis_host: Redis server host address
@@ -121,18 +121,18 @@ class CosmicFengine():
             self.redis_pubsub = self.redis_obj.pubsub(ignore_subscribe_messages=True)
 
         #Thread init stuff
-        self.delay_tracking_switch = threading.Event()
-        self.delay_track = threading.Event()
-        self.delay_halfoff = threading.Event()
-        self.delay_halfcal = threading.Event()
-        self.delay_halfphase = threading.Event()
-        self.delay_halfphasecorrection = threading.Event()
-        self.delay_fullphasecorrection = threading.Event()
-        self.delay_tracking_thread = None
+        self.delay_tracking_switch = threading.Event() # Set to switch on/off delay/phase tracking thread
+        self.delay_track = threading.Event()   # Set to run delay/phase tracking
+        self.delay_halfoff = threading.Event() # Set to zero delays prior to load for signals 0,1
+        self.delay_halfcal = threading.Event() # Set to overwrite signal 0,1 delay with static calibration only
+        self.delay_halfphase = threading.Event() # Set to zero phase for signal 0,1
+        self.delay_halfphasecorrection = threading.Event() # Set to include fshift phase correction for signal 2,3
+        self.delay_fullphasecorrection = threading.Event() # Set to include fshift phase correction for all signals
+        self.delay_tracking_thread = None # Delay tracking thread instance
 
-        self.dts_mon_switch = threading.Event()
-        self.dts_mon_tx_disable = threading.Event()
-        self.dts_mon_thread = None
+        self.dts_mon_switch = threading.Event() # Set to switch on/off DTS monitoring thread
+        self.dts_mon_tx_disable = threading.Event() # Set by the DTS monitor when output should be disabled
+        self.dts_mon_thread = None # DTS monitoring thread instance
 
         self.blocks = {}
         try:
@@ -935,39 +935,47 @@ class CosmicFengine():
         ]
 
     def set_delays(self, delay_to_load, delay_rate_to_load, phase_to_load, phase_rate_to_load,
-                    sideband, clock_rate_hz=2048000000, invert_band=False):
+                   sideband, clock_rate_hz=2048000000, invert_band=False):
         """
         Transform the argument delays, delay rates, phases and phase rates before uploading them to the F-Engine.
         After sufficient testing, this function will be absorbed into delay_tracking to reduce complexity.
+
         :param delay_to_load: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
             the delay, in nanoseconds, which should be applied at the appropriate time.
             Whole ADC sample delays are implemented using a coarse delay, while sub-sample
             delays are implemented as a post-FFT phase rotation.
         :type delay_to_load: ndarray{float}
+
         :param delay_rate_to_load: 4-tuple of delay rates for X and Y polarizations for both tunings. Each value is
             the delay rate, in nanoseconds per second. This is the incremental delay
             which should be added to the current delay each second.
             Internally, delay rate is converted from nanoseconds-per-second to
             samples-per-spectra. Firmware delays are updated every 4 spectra.
         :type delay_rate_to_load: ndarray{float}
+
         :param phase_to_load: 4-tuple of phases for X and Y polarizations for both tunings. Each value is
             the phase, in radians. 
         :type phase_to_load: ndarray{float}
+
         :param phase_rate_to_load: 4-tuple of phase_rates for X and Y polarizations for both tunings. Each value is
             the rate of change of phase, in radians per second. This is the incremental phase
             which should be added to the current phase each second.
         :type phase_rate_to_load: ndarray{float}
+
         :param sideband: 2-long list of integers which are the VLA prescribed sideband factors.
         :type sideband: list{int}
+
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
+
         :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
             apply a fractional delay which is the negative of the physical delay.
         :type invert_band: bool
 
         Returns:
             fshifts: ndarray{floats} the fshift values in Hz used in the phase correction.
+
         """
         delay_samples = delay_to_load * (1e-9 * clock_rate_hz)
         delay_samples_int = np.zeros(self.delay.n_streams, dtype=int)
@@ -1166,6 +1174,7 @@ class CosmicFengine():
                 'switch_set': bool (the thread's switch is set),
                 'ok': bool (is_alive == switch_set)
             }
+
         """
         status = {
             "switch_set": self.dts_mon_switch.is_set(),
@@ -1377,6 +1386,7 @@ class CosmicFengine():
                 'switch_set': bool (the thread's switch is set),
                 'ok': bool (is_alive == switch_set)
             }
+
         """
         status = {
             "switch_set": self.delay_tracking_switch.is_set(),
@@ -1614,12 +1624,21 @@ class CosmicFengine():
     def set_delay_tracking_mode(self, delay_mode):
         """
         Sets up internal delay tracking mode according to the provided mode.
+        Full phase and delay tracking (i.e., tracking expected to be used
+        in production, rather than testing) is achieved with "full-corrected-phase".
 
         :param delay_mode: The delay tracking mode, one of the following with
-            False being the fallback:
-            True, "fixed-only", "half-off", "half-cal", "half-phase",
-            "half-corrected-phase", "full-corrected-phase", False
+            False being the fallback -
+            True - Calibrate and track phase and delay, but don't include fshift correction
+            "fixed-only" - Load fixed calibration delays only
+            "half-off" - Zero out delays for signals 0,1 prior to load
+            "half-cal" - Overwrite delays for signals 0,1 with calibration value
+            "half-phase" - Zero out phase for signals 0,1 prior to load
+            "half-corrected-phase" - Include fshift phase correction for signals 2,3 only
+            "full-corrected-phase" - Include fshift correction for all signals
+            False - No delays or phases are loaded
         :type delay_mode: string or boolean
+
         """
 
         if delay_mode == True:
@@ -1691,10 +1710,12 @@ class CosmicFengine():
 
     def get_delay_tracking_mode(self):
         """
-        Fetches internal delay tracking mode.
+        Fetches internal delay tracking mode. See ``set_delay_tracking_mode`` for
+        mode descriptions. "full-corrected-phase" is what is required for
+        effective production operation.
 
         Returns:
-            delay_mode: str: string indicating current delay tracking mode
+            delay_mode (str): Current delay tracking mode
         """
         if self.delay_tracking_switch.is_set():
             if self.delay_track.is_set():
@@ -1744,7 +1765,7 @@ class CosmicFengine():
         :param fshifts: 4-length ndarray of the lo frequency shifts in Hz applied to each stream in the `lo` block.
         :type fshifts: ndarray{float}
         :param load_time: a unix time in seconds at which to load the delay values provided to the 
-        F-Engine. 
+            F-Engine. 
         :type load_time: float
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
@@ -1752,6 +1773,7 @@ class CosmicFengine():
         :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
             apply a fractional delay which is the negative of the physical delay.
         :type invert_band: bool
+
         """
         force_delay_load = False
         if load_time is None:
