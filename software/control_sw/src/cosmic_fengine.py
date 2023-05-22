@@ -914,8 +914,8 @@ class CosmicFengine():
             self.logger.info(f"F-Shift load time set to {time.ctime(lo_load_time)}")
             time.sleep(lo_load_time - (time.time()))
             fshift_time_to_load = self.lo.get_time_to_load()/FPGA_CLOCK_RATE_HZ
-            assert (np.isclose(fshift_time_to_load, 0.0, atol=1e-2),
-                    f"After sleeping, time to load from the F-Engine {fshift_time_to_load}s is not near zero.")
+            assert np.isclose(fshift_time_to_load, 0.0, atol=1e-2), \
+                    f"After sleeping, time to load from the F-Engine {fshift_time_to_load}s is not near zero."
         else:
             raise RuntimeError("Cannot set F-shift load time for time in the past.")
 
@@ -1591,13 +1591,14 @@ class CosmicFengine():
                     # sleep till time to load == 0 (to allow for loading)
                     expected_sleep_duration = required_loadtime_s - time.time_ns()*1e-9
                     feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
-                    assert (np.isclose(feng_time_to_load, expected_sleep_duration, atol=1e-4),
-                            f"Time to load from the F-Engine {feng_time_to_load}s is not within 0.1ms of the expected time to load {expected_sleep_duration}s.")
-                    assert (feng_time_to_load > 0, f"F-Engine time to load is not positive = {feng_time_to_load}. This means the load will likely be unsuccessful.")
+                    assert np.isclose(feng_time_to_load, expected_sleep_duration, atol=1e-4), \
+                            f"Time to load from the F-Engine {feng_time_to_load}s is not within 0.1ms of the expected time to load {expected_sleep_duration}s."
+                    assert feng_time_to_load > 0, \
+                            f"F-Engine time to load is not positive = {feng_time_to_load}. This means the load will likely be unsuccessful."
                     time.sleep(expected_sleep_duration)  
                     feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
-                    assert (np.isclose(feng_time_to_load, 0.0, atol=1e-2),
-                            f"After sleeping, time to load from the F-Engine {feng_time_to_load}s is not near zero.")
+                    assert np.isclose(feng_time_to_load, 0.0, atol=1e-2), \
+                            f"After sleeping, time to load from the F-Engine {feng_time_to_load}s is not near zero."
                 except ValueError:
                     self.logger.warn(f"""Tried to sleep for negative time.""")
                     if not self.check_delay_time(tolerance= 1e-1): 
