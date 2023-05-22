@@ -7,9 +7,9 @@ Overview
 The VLA F-Engine firmware is designed to run on an AlphaData ADM-PCIe-9H7 [1]_ FPGA board, and provides channelization of digital data streams from two VLA antennas.
 Two different versions of the firmware exist - one for each of the two VLA digitization modes.
 
-In the VLA's `3-bit` mode, F-engine firmware processes (for each of two dual-polarization antennas), 4x2GHz bands.
+In the VLA's `8-bit` mode, F-engine firmware processes (for each of two dual-polarization antennas), 2 x 1GHz bands.
 
-In the VLA's `8-bit` mode, F-engine firmware processes (for each of two dual-polarization antennas), 2x1GHz bands.
+In the VLA's `3-bit` mode, F-engine firmware processes (for each of two dual-polarization antennas), 4 x 2GHz bands. This mode is still under development.
 
 In both cases, the firmware channelizes the received bands into 1 MHz "coarse channels", and transmits these over 100Gb Ethernet at 8-bit (8-bit real + 8-bit imaginary) sample resolution.
 
@@ -101,6 +101,9 @@ The top-level specs of the F-Engine are:
     +-------------------------+----------+----------------------+
     | Post-Quantization Data  | 8        | 8-bit real; 8-bit    |
     | Bitwidth                |          | imaginary            |
+    +-------------------------+----------+----------------------+
+    | Number of 100GbE        | 4        | 2 per antenna        |
+    | outputs                 |          |                      |
     +-------------------------+----------+----------------------+
 
 
@@ -296,12 +299,12 @@ Each packet contains a data payload of up to 8192 bytes, made up of 32 time samp
   };
 
 The header entries are all encoded network-endian and should be interpretted as follows:
-  - ``version``; TODO: check how this is populated
+  - ``version``; *Firmware Major Version Number*
   - ``type``; *Packet type*: Bit [0] is 1 if the axes of data payload are in order [slowest to fastest] channel x time x polarization. This is currently the only supported mode. Bit [1] is 1 if the data payload comprises 8+8 bit complex integers. This is currently the only supported mode.
   - ``n_chans``; *Number of Channels*: Indicates the number of frequency channels present in the payload of this data packet.
   - ``chan``; *Channel number*: The index of the first channel present in this packet. For example, a channel number ``c`` implies the packet contains channels ``c`` to ``c + n_chans - 1``.
   - ``feng_id``; *Antenna ID*: A runtime configurable ID which uniquely associates a packet with a particular SNAP board.
-  - ``timestamp``; *Sample number*: The index of the first time sample present in this packet. For example, a sample number :math:`s` implies the packet contains samples :math:`s` to :math:`s+15`. Sample number counts in units of spectra since the UNIX epoch, and can be referred to GPS time through knowledge of the system sampling rate and FFT length parameters.
+  - ``timestamp``; *Sample number*: The index of the first time sample present in this packet. For example, a sample number :math:`s` implies the packet contains samples :math:`s` to :math:`s+15`. Sample number counts in units of spectra since the UNIX epoch, and can be referred to GPS time through knowledge of the system sampling rate and FFT length parameters (or, similarly, by knowing that each FFT channel is critically sampled at 1 MHz rate).
 
 The data payload in each packet is determined by the number of frequency channels it contains.
 The maximum is 8192 bytes.

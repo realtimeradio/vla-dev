@@ -1381,6 +1381,7 @@ class CosmicFengine():
         Get a dictionary describing the state of the delay tracking thread.
 
         Returns:
+
             dict: {
                 'is_alive': bool|None (the thread is alive or None if the thread has never been instantiated),
                 'switch_set': bool (the thread's switch is set),
@@ -1388,6 +1389,7 @@ class CosmicFengine():
             }
 
         """
+
         status = {
             "switch_set": self.delay_tracking_switch.is_set(),
         }
@@ -1716,6 +1718,7 @@ class CosmicFengine():
 
         Returns:
             delay_mode (str): Current delay tracking mode
+
         """
         if self.delay_tracking_switch.is_set():
             if self.delay_track.is_set():
@@ -1742,34 +1745,43 @@ class CosmicFengine():
         """
         Set the delays for this F-Engine once. If no load_time is provided, delays are uploaded to the
         F-Engine immediately.
+
         :param delays: 4-tuple of delays for X and Y polarizations for both tunings. Each value is 
             the delay, in nanoseconds, which should be applied at the appropriate time.
             Whole ADC sample delays are implemented using a coarse delay, while sub-sample
             delays are implemented as a post-FFT phase rotation.
         :type delays: list{float}
+
         :param delay_rates: 4-tuple of delay rates for X and Y polarizations for both tunings. Each value is
             the delay rate, in nanoseconds per second. This is the incremental delay
             which should be added to the current delay each second.
             Internally, delay rate is converted from nanoseconds-per-second to
             samples-per-spectra. Firmware delays are updated every 4 spectra.
         :type delay_rates: list{float}
+
         :param phases: 4-tuple of phases for X and Y polarizations for both tunings. Each value is
             the phase, in radians. 
         :type phases: list{float}
+
         :param phase_rates: 4-tuple of phase_rates for X and Y polarizations for both tunings. Each value is
             the rate of change of phase, in radians per second. This is the incremental phase
             which should be added to the current phase each second.
         :type phase_rates: list{float}
+
         :param sideband: 2-length ndarray of the sideband value applied to each tuning.
         :type sideband: ndarray{int}
+
         :param fshifts: 4-length ndarray of the lo frequency shifts in Hz applied to each stream in the `lo` block.
         :type fshifts: ndarray{float}
+
         :param load_time: a unix time in seconds at which to load the delay values provided to the 
             F-Engine. 
         :type load_time: float
+
         :param clock_rate_hz: ADC clock rate in Hz. If None, the clock rate will be computed from
             the observed PPS interval, which could fail if the PPS is unstable or not present.
         :type clock_rate_hz: int
+
         :param invert_band: If True, invert the gradient of the phase-vs-frequency channel. I.e.,
             apply a fractional delay which is the negative of the physical delay.
         :type invert_band: bool
