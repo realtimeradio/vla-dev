@@ -1,4 +1,3 @@
-from tkinter import E
 from .block import Block
 from .timed_pulse import TimedPulse
 import numpy as np
