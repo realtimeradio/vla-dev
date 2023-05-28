@@ -537,10 +537,13 @@ class Dts(Block):
 
     def is_synced(self):
         synced = self.get_snapshot_sync()
+        not_all_zero = False
         for v in synced:
-            if v != 0 and v != (2**self.nlanes-1):
-                return False
-        return True
+            if v != 0:
+                not_all_zero = True
+                if v != (2**self.nlanes-1):
+                    return False
+        return not_all_zero
 
     def set_corruption_control(self, v):
         self.change_reg_bits('dts', v, 0, 12, word_offset=5)
