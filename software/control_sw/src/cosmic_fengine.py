@@ -1609,8 +1609,8 @@ class CosmicFengine():
                             self.logger.warn(f"F-Engine time to load is not positive = {feng_time_to_load}. This means the load will likely be unsuccessful.")
                     time.sleep(expected_sleep_duration)  
                     feng_time_to_load = self.phaserotate.get_time_to_load()/FPGA_CLOCK_RATE_HZ
-                    assert np.isclose(feng_time_to_load, 0.0, atol=1e-2), \
-                            f"After sleeping, time to load from the F-Engine {feng_time_to_load}s is not near zero."
+                    if not np.isclose(feng_time_to_load, 0.0, atol=1e-2):
+                            self.logger.warn(f"After sleeping, time to load from the F-Engine {feng_time_to_load}s is not near zero.")
                 except ValueError:
                     self.logger.warn(f"""Tried to sleep for negative time.""")
                     if not self.check_delay_time(tolerance= 1e-1): 
