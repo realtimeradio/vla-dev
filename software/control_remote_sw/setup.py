@@ -3,12 +3,12 @@ import glob
 import os
 
 ver = '0.0.4'
-try:
-    import subprocess
-    ver = ver + '-' + subprocess.check_output(['git', 'describe', '--abbrev=8', '--always', '--dirty', '--tags']).decode().strip()
-    print('Version is: %s' % ver)
-except:
-    print('Couldn\'t get version from git. Defaulting to %s' % ver)
+# try:
+#     import subprocess
+#     ver = ver + '-' + subprocess.check_output(['git', 'describe', '--abbrev=8', '--always', '--tags']).decode().strip()
+#     print('Version is: %s' % ver)
+# except:
+#     print('Couldn\'t get version from git. Defaulting to %s' % ver)
 
 # Generate a __version__.py file with this version in it
 here = os.path.abspath(os.path.dirname(__file__))
